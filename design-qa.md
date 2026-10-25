@@ -133,3 +133,15 @@ final result: passed
 - Android 10 实体机已覆盖安装 `0.1.26+27` release 构建并完成上述页面和手势检查。iOS 运行时视觉仍需带灵动岛的真实设备最终确认。
 
 final result: passed with iOS device check pending
+
+## 撤回箭头恢复图标验收（v0.1.27+28）
+
+- source visual truth：`C:\Users\AdminWLWpc\.codex\generated_images\01a161e3-b631-70f1-bf2b-0d12e63e5763\exec-189d5be4-6c2c-4da5-a3e6-4b4816ea805c.png`，1536×1024；用户选择的第 1 款短尾圆角撤回箭头。
+- implementation screenshot：`ui-preview/release-v0.1.27-undo-icon-selected.png`，720×1600；Android 10 实体机、待删除队列单项选中状态。
+- normalization：两张图的页面比例与内容数量不同，因此全屏只用于确认页面语境；精确比较聚焦于缩略图灰色圆形恢复入口及底部描边恢复按钮，不按页面栅格做像素级比较。
+- focused comparison：实现使用 Material `undo_rounded`，箭头方向、短尾、圆角端点、白色缩略图图标和蓝色底部按钮图标均与所选视觉方向一致，小尺寸下轮廓清楚，无垃圾桶残留。
+- required surfaces：字体、字号、间距、圆角、颜色、透明度、照片裁切和“恢复”文案均沿用现有组件，没有因本次图标替换发生漂移。
+- interactions：单项恢复、批量恢复和待删除复核恢复均由现有测试覆盖；恢复行为未改变。
+- findings：无 P0/P1/P2；没有需要阻塞交付的视觉差异。
+
+final result: passed

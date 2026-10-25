@@ -3517,7 +3517,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                           _glassIcon(
                             key: const Key('pending-restore-control'),
                             tooltip: '恢复',
-                            icon: Icons.restore_from_trash_rounded,
+                            icon: Icons.undo_rounded,
                             onPressed: busy || item == null
                                 ? null
                                 : () => _act(ReviewAction.restore),
@@ -4141,7 +4141,7 @@ class _QueueScreenState extends State<QueueScreen> {
                                 padding: EdgeInsets.zero,
                               ),
                               icon: const Icon(
-                                Icons.restore_from_trash_rounded,
+                                Icons.undo_rounded,
                                 size: 17,
                               ),
                               onPressed: busy ? null : () => _restore([id]),
@@ -4188,7 +4188,7 @@ class _QueueScreenState extends State<QueueScreen> {
                   onPressed: busy || selected.isEmpty
                       ? null
                       : () => _restore(selected.toList()),
-                  icon: const Icon(Icons.restore_from_trash_rounded),
+                  icon: const Icon(Icons.undo_rounded),
                   label: Text('恢复 ${selected.length} 项'),
                 ),
               ),

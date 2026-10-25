@@ -1400,7 +1400,13 @@ void main() {
     await tester.tap(find.byKey(const Key('open-pending-review')));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.restore_from_trash_rounded), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('pending-restore-control')),
+        matching: find.byIcon(Icons.undo_rounded),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('pending-restore-control')));
     await tester.pumpAndSettle();
     expect(store.actions, [ReviewAction.restore]);
@@ -1449,7 +1455,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byIcon(Icons.restore_from_trash_rounded), findsNWidgets(3));
+    expect(find.byIcon(Icons.undo_rounded), findsNWidgets(3));
     expect(tester.widget<AppBar>(find.byType(AppBar)).primary, isTrue);
     expect(find.text('恢复 0 项'), findsOneWidget);
     expect(find.text('删除 0 项'), findsOneWidget);
