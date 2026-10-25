@@ -26,18 +26,82 @@ class SystemAlbumSummary {
 }
 
 enum SystemCategoryKind {
+  generic,
+  panoramas,
   videos,
+  favorites,
+  timelapses,
+  recentlyAdded,
+  bursts,
+  slowMotion,
   screenshots,
   live,
   selfies,
   portraits,
+  animated,
+  longExposures,
+  raw,
+  cinematic,
   spatialPhotos,
   spatialVideos,
+  proRes,
+  screenRecordings,
+  receipts,
+  handwriting,
+  illustrations,
+  qrCodes,
 }
+
+SystemCategoryKind? iosSystemCategoryKind(
+  PMDarwinAssetCollectionSubtype? subtype,
+) => switch (subtype) {
+  PMDarwinAssetCollectionSubtype.smartAlbumGeneric =>
+    SystemCategoryKind.generic,
+  PMDarwinAssetCollectionSubtype.smartAlbumPanoramas =>
+    SystemCategoryKind.panoramas,
+  PMDarwinAssetCollectionSubtype.smartAlbumVideos => SystemCategoryKind.videos,
+  PMDarwinAssetCollectionSubtype.smartAlbumFavorites =>
+    SystemCategoryKind.favorites,
+  PMDarwinAssetCollectionSubtype.smartAlbumTimelapses =>
+    SystemCategoryKind.timelapses,
+  PMDarwinAssetCollectionSubtype.smartAlbumRecentlyAdded =>
+    SystemCategoryKind.recentlyAdded,
+  PMDarwinAssetCollectionSubtype.smartAlbumBursts => SystemCategoryKind.bursts,
+  PMDarwinAssetCollectionSubtype.smartAlbumSlomoVideos =>
+    SystemCategoryKind.slowMotion,
+  PMDarwinAssetCollectionSubtype.smartAlbumSelfPortraits =>
+    SystemCategoryKind.selfies,
+  PMDarwinAssetCollectionSubtype.smartAlbumScreenshots =>
+    SystemCategoryKind.screenshots,
+  PMDarwinAssetCollectionSubtype.smartAlbumDepthEffect =>
+    SystemCategoryKind.portraits,
+  PMDarwinAssetCollectionSubtype.smartAlbumLivePhotos =>
+    SystemCategoryKind.live,
+  PMDarwinAssetCollectionSubtype.smartAlbumAnimated =>
+    SystemCategoryKind.animated,
+  PMDarwinAssetCollectionSubtype.smartAlbumLongExposures =>
+    SystemCategoryKind.longExposures,
+  PMDarwinAssetCollectionSubtype.smartAlbumRAW => SystemCategoryKind.raw,
+  PMDarwinAssetCollectionSubtype.smartAlbumCinematic =>
+    SystemCategoryKind.cinematic,
+  PMDarwinAssetCollectionSubtype.smartAlbumProRes => SystemCategoryKind.proRes,
+  PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings =>
+    SystemCategoryKind.screenRecordings,
+  PMDarwinAssetCollectionSubtype.smartAlbumReceipts =>
+    SystemCategoryKind.receipts,
+  PMDarwinAssetCollectionSubtype.smartAlbumHandwriting =>
+    SystemCategoryKind.handwriting,
+  PMDarwinAssetCollectionSubtype.smartAlbumIllustrations =>
+    SystemCategoryKind.illustrations,
+  PMDarwinAssetCollectionSubtype.smartAlbumQRCodes =>
+    SystemCategoryKind.qrCodes,
+  _ => null,
+};
 
 class SystemCategorySummary {
   const SystemCategorySummary({
     required this.kind,
+    required this.label,
     required this.path,
     required this.count,
     required this.coverId,
@@ -45,6 +109,7 @@ class SystemCategorySummary {
   });
 
   final SystemCategoryKind kind;
+  final String label;
   final AssetPathEntity path;
   final int count;
   final String? coverId;
@@ -257,19 +322,7 @@ class MediaRepository {
     final result = <SystemCategorySummary>[];
     for (final path in paths) {
       final subtype = path.albumTypeEx?.darwin?.subtype;
-      final kind = switch (subtype) {
-        PMDarwinAssetCollectionSubtype.smartAlbumVideos =>
-          SystemCategoryKind.videos,
-        PMDarwinAssetCollectionSubtype.smartAlbumScreenshots =>
-          SystemCategoryKind.screenshots,
-        PMDarwinAssetCollectionSubtype.smartAlbumLivePhotos =>
-          SystemCategoryKind.live,
-        PMDarwinAssetCollectionSubtype.smartAlbumSelfPortraits =>
-          SystemCategoryKind.selfies,
-        PMDarwinAssetCollectionSubtype.smartAlbumDepthEffect =>
-          SystemCategoryKind.portraits,
-        _ => null,
-      };
+      final kind = iosSystemCategoryKind(subtype);
       if (kind != null) {
         final count = await path.assetCountAsync;
         if (count == 0) continue;
@@ -277,6 +330,7 @@ class MediaRepository {
         result.add(
           SystemCategorySummary(
             kind: kind,
+            label: path.name.trim(),
             path: path,
             count: count,
             coverId: cover.firstOrNull?.id,
@@ -308,6 +362,7 @@ class MediaRepository {
             kind: type == AssetType.image
                 ? SystemCategoryKind.spatialPhotos
                 : SystemCategoryKind.spatialVideos,
+            label: type == AssetType.image ? '空间照片' : '空间视频',
             path: path,
             count: count,
             coverId: covers[type],
@@ -316,7 +371,6 @@ class MediaRepository {
         );
       }
     }
-    result.sort((a, b) => a.kind.index.compareTo(b.kind.index));
     return result;
   }
 

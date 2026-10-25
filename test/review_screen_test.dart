@@ -605,6 +605,10 @@ void main() {
       const Color(0xFF10131A),
     );
     expect(
+      tester.widget<Text>(find.text('已经是第一张')).style?.decoration,
+      TextDecoration.none,
+    );
+    expect(
       find.ancestor(of: notice, matching: find.byType(BackdropFilter)),
       findsOneWidget,
     );
@@ -1106,17 +1110,28 @@ void main() {
       find.byKey(const ValueKey('category-category:screenshot')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('category-category:selfie')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('category-category:live')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('category-similar')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('category-all'))).height,
-      lessThanOrEqualTo(72),
+      greaterThan(72),
     );
     expect(
-      tester.getTopLeft(find.byKey(const ValueKey('category-all'))).dy,
       tester
           .getTopLeft(find.byKey(const ValueKey('category-category:video')))
           .dy,
+      greaterThan(
+        tester.getBottomLeft(find.byKey(const ValueKey('category-all'))).dy,
+      ),
     );
+    expect(find.text('全部照片与视频'), findsOneWidget);
 
     await tester.tap(find.text('相册'));
     await tester.pumpAndSettle();
@@ -1237,6 +1252,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-glass-nav')), findsOneWidget);
+    expect(find.text('我的'), findsOneWidget);
+    expect(find.text('更多'), findsNothing);
     expect(
       find.descendant(
         of: find.byKey(const Key('home-glass-nav')),
@@ -1299,7 +1316,7 @@ void main() {
           ),
         )
         .first;
-    expect(selectedMode.color, const Color(0xB8E2E9FF));
+    expect(selectedMode.color, const Color(0x8FE2E9FF));
 
     await tester.tap(find.byKey(const ValueKey('library-mode-month')));
     await tester.pumpAndSettle();
@@ -1383,6 +1400,7 @@ void main() {
     await tester.tap(find.byKey(const Key('open-pending-review')));
     await tester.pumpAndSettle();
 
+    expect(find.byIcon(Icons.restore_from_trash_rounded), findsOneWidget);
     await tester.tap(find.byKey(const Key('pending-restore-control')));
     await tester.pumpAndSettle();
     expect(store.actions, [ReviewAction.restore]);
@@ -1431,6 +1449,8 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
+    expect(find.byIcon(Icons.restore_from_trash_rounded), findsNWidgets(3));
+    expect(tester.widget<AppBar>(find.byType(AppBar)).primary, isTrue);
     expect(find.text('恢复 0 项'), findsOneWidget);
     expect(find.text('删除 0 项'), findsOneWidget);
 
@@ -1446,19 +1466,45 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('queue preview is fullscreen and supports four-times zoom', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(home: QueuePreviewScreen(FakeMediaRepository(), photo)),
-    );
+  testWidgets(
+    'queue preview stays fitted and down swipe returns to the queue',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      QueuePreviewScreen(FakeMediaRepository(), photo),
+                ),
+              ),
+              child: const Text('打开预览'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开预览'));
+      await tester.pumpAndSettle();
 
-    final viewer = tester.widget<InteractiveViewer>(
-      find.byKey(const Key('queue-preview-zoom')),
-    );
-    expect(viewer.maxScale, 4);
-    expect(find.text('全屏预览'), findsOneWidget);
-  });
+      final viewer = tester.widget<InteractiveViewer>(
+        find.byKey(const Key('queue-preview-zoom')),
+      );
+      expect(viewer.maxScale, 4);
+      expect(viewer.panEnabled, isFalse);
+      expect(viewer.boundaryMargin, EdgeInsets.zero);
+      expect(find.byKey(const Key('queue-preview-back')), findsOneWidget);
+      expect(find.text('下滑返回待删除列表'), findsOneWidget);
+
+      await tester.drag(
+        find.byKey(const Key('queue-preview-surface')),
+        const Offset(0, 130),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(QueuePreviewScreen), findsNothing);
+    },
+  );
 
   testWidgets('delete result reports cleaned items and estimated space', (
     tester,

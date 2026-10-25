@@ -10,6 +10,10 @@ import 'package:video_player/video_player.dart';
 import 'media_repository.dart';
 import 'store.dart';
 
+const _buttonTextShadows = [
+  Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+];
+
 enum DownSwipeAction { none, pending, returnToAlbum }
 
 extension on DownSwipeAction {
@@ -80,27 +84,30 @@ class _FloatingGlassAppBar extends StatelessWidget
   Size get preferredSize => const Size.fromHeight(68);
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0x70FFFFFF),
-            border: Border.all(color: const Color(0x99FFFFFF)),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: AppBar(
-            primary: false,
-            toolbarHeight: 56,
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            title: title,
-            actions: actions,
+  Widget build(BuildContext context) => AppBar(
+    primary: true,
+    toolbarHeight: 68,
+    backgroundColor: Colors.transparent,
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    scrolledUnderElevation: 0,
+    title: title,
+    actions: actions,
+    flexibleSpace: SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0x70FFFFFF),
+                border: Border.all(color: const Color(0x99FFFFFF)),
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
           ),
         ),
       ),
@@ -251,9 +258,30 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          textStyle: const TextStyle(shadows: _buttonTextShadows),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          textStyle: const TextStyle(shadows: _buttonTextShadows),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          textStyle: const TextStyle(shadows: _buttonTextShadows),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          textStyle: const TextStyle(shadows: _buttonTextShadows),
+        ),
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        labelTextStyle: WidgetStatePropertyAll(
+          TextStyle(shadows: _buttonTextShadows),
         ),
       ),
       useMaterial3: true,
@@ -821,28 +849,65 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  String _categoryLabel(SystemCategoryKind kind) => switch (kind) {
-    SystemCategoryKind.videos => '视频',
-    SystemCategoryKind.screenshots => '截屏',
-    SystemCategoryKind.live => '实况',
-    SystemCategoryKind.selfies => '自拍',
-    SystemCategoryKind.portraits => '人像',
-    SystemCategoryKind.spatialPhotos => '空间照片',
-    SystemCategoryKind.spatialVideos => '空间视频',
-  };
+  String _categoryLabel(SystemCategorySummary category) {
+    if (category.label.isNotEmpty) return category.label;
+    return switch (category.kind) {
+      SystemCategoryKind.generic => '系统分类',
+      SystemCategoryKind.panoramas => '全景照片',
+      SystemCategoryKind.videos => '视频',
+      SystemCategoryKind.favorites => '个人收藏',
+      SystemCategoryKind.timelapses => '延时摄影',
+      SystemCategoryKind.recentlyAdded => '最近添加',
+      SystemCategoryKind.bursts => '连拍快照',
+      SystemCategoryKind.slowMotion => '慢动作',
+      SystemCategoryKind.screenshots => '截屏',
+      SystemCategoryKind.live => '实况照片',
+      SystemCategoryKind.selfies => '自拍',
+      SystemCategoryKind.portraits => '人像',
+      SystemCategoryKind.animated => '动图',
+      SystemCategoryKind.longExposures => '长曝光',
+      SystemCategoryKind.raw => 'RAW',
+      SystemCategoryKind.cinematic => '电影效果',
+      SystemCategoryKind.spatialPhotos => '空间照片',
+      SystemCategoryKind.spatialVideos => '空间视频',
+      SystemCategoryKind.proRes => 'ProRes',
+      SystemCategoryKind.screenRecordings => '屏幕录制',
+      SystemCategoryKind.receipts => '收据',
+      SystemCategoryKind.handwriting => '手写内容',
+      SystemCategoryKind.illustrations => '插图',
+      SystemCategoryKind.qrCodes => '二维码',
+    };
+  }
 
   IconData _categoryIcon(SystemCategoryKind kind) => switch (kind) {
+    SystemCategoryKind.generic => Icons.auto_awesome_outlined,
+    SystemCategoryKind.panoramas => Icons.panorama_horizontal_outlined,
     SystemCategoryKind.videos => Icons.play_circle_outline,
+    SystemCategoryKind.favorites => Icons.favorite_border_rounded,
+    SystemCategoryKind.timelapses => Icons.timelapse_rounded,
+    SystemCategoryKind.recentlyAdded => Icons.update_rounded,
+    SystemCategoryKind.bursts => Icons.burst_mode_outlined,
+    SystemCategoryKind.slowMotion => Icons.slow_motion_video_rounded,
     SystemCategoryKind.screenshots => Icons.screenshot_outlined,
     SystemCategoryKind.live => Icons.motion_photos_on_outlined,
     SystemCategoryKind.selfies => Icons.face_outlined,
     SystemCategoryKind.portraits => Icons.portrait_outlined,
+    SystemCategoryKind.animated => Icons.animation_rounded,
+    SystemCategoryKind.longExposures => Icons.shutter_speed_rounded,
+    SystemCategoryKind.raw => Icons.raw_on_outlined,
+    SystemCategoryKind.cinematic => Icons.movie_filter_outlined,
     SystemCategoryKind.spatialPhotos => Icons.view_in_ar_outlined,
     SystemCategoryKind.spatialVideos => Icons.videocam_outlined,
+    SystemCategoryKind.proRes => Icons.high_quality_outlined,
+    SystemCategoryKind.screenRecordings => Icons.screen_share_outlined,
+    SystemCategoryKind.receipts => Icons.receipt_long_outlined,
+    SystemCategoryKind.handwriting => Icons.draw_outlined,
+    SystemCategoryKind.illustrations => Icons.brush_outlined,
+    SystemCategoryKind.qrCodes => Icons.qr_code_rounded,
   };
 
   Widget _systemCategoryTile(SystemCategorySummary category) {
-    final label = _categoryLabel(category.kind);
+    final label = _categoryLabel(category);
     return _compactCategoryTile(
       key: ValueKey('category-${category.kind.name}'),
       icon: _categoryIcon(category.kind),
@@ -891,7 +956,11 @@ class _HomeScreenState extends State<HomeScreen> {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                shadows: _buttonTextShadows,
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -901,6 +970,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Color(0xFF687086),
               fontSize: 12,
               fontWeight: FontWeight.w700,
+              shadows: _buttonTextShadows,
             ),
           ),
         ],
@@ -943,16 +1013,28 @@ class _HomeScreenState extends State<HomeScreen> {
     itemBuilder: (context, index) => children[index],
   );
 
-  Widget _categoryGrid() {
-    if (!Platform.isIOS) {
-      return _compactCategoryGrid([
-        _scopeCategoryTile(
+  Widget _categoryLayout(List<Widget> categories) => Column(
+    children: [
+      SizedBox(
+        height: 84,
+        child: _scopeCategoryTile(
           Scope.all,
           Icons.photo_library_outlined,
-          label: '全部',
+          label: '全部照片与视频',
         ),
+      ),
+      const SizedBox(height: 10),
+      _compactCategoryGrid(categories),
+    ],
+  );
+
+  Widget _categoryGrid() {
+    if (!Platform.isIOS) {
+      return _categoryLayout([
         _scopeCategoryTile(Scope.videos, Icons.play_circle_outline),
         _scopeCategoryTile(Scope.screenshots, Icons.screenshot_outlined),
+        _scopeCategoryTile(Scope.selfies, Icons.face_outlined),
+        _scopeCategoryTile(Scope.live, Icons.motion_photos_on_outlined),
         _similarCategoryTile(),
       ]);
     }
@@ -966,12 +1048,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         final categories = snapshot.data ?? const <SystemCategorySummary>[];
-        return _compactCategoryGrid([
-          _scopeCategoryTile(
-            Scope.all,
-            Icons.photo_library_outlined,
-            label: '全部',
-          ),
+        return _categoryLayout([
           ...categories.map(_systemCategoryTile),
           _similarCategoryTile(),
         ]);
@@ -1390,8 +1467,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       label: '相册',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.more_horiz),
-                      label: '更多',
+                      icon: Icon(Icons.person_outline_rounded),
+                      selectedIcon: Icon(Icons.person_rounded),
+                      label: '我的',
                     ),
                   ],
                 ),
@@ -2067,6 +2145,9 @@ class _ScopeScreenState extends State<ScopeScreen> {
                                   _LibraryTimeMode.all => '全部',
                                 },
                                 selected: libraryTimeMode == mode,
+                                selectedColor: mode == _LibraryTimeMode.all
+                                    ? const Color(0x8FE2E9FF)
+                                    : const Color(0xB8E2E9FF),
                                 onTap: () =>
                                     setState(() => libraryTimeMode = mode),
                               ),
@@ -2171,18 +2252,20 @@ class _LibraryControlItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.selectedColor = const Color(0xB8E2E9FF),
   });
 
   final IconData? icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final Color selectedColor;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(4),
     child: Material(
-      color: selected ? const Color(0xB8E2E9FF) : Colors.transparent,
+      color: selected ? selectedColor : Colors.transparent,
       borderRadius: BorderRadius.circular(24),
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
@@ -2208,6 +2291,7 @@ class _LibraryControlItem extends StatelessWidget {
                     : const Color(0xFF5F6672),
                 fontSize: 15,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                shadows: _buttonTextShadows,
               ),
             ),
           ],
@@ -2623,6 +2707,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                         color: Color(0xFF10131A),
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ),
@@ -3432,7 +3517,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                           _glassIcon(
                             key: const Key('pending-restore-control'),
                             tooltip: '恢复',
-                            icon: Icons.restore_rounded,
+                            icon: Icons.restore_from_trash_rounded,
                             onPressed: busy || item == null
                                 ? null
                                 : () => _act(ReviewAction.restore),
@@ -4055,7 +4140,10 @@ class _QueueScreenState extends State<QueueScreen> {
                                 maximumSize: const Size.square(28),
                                 padding: EdgeInsets.zero,
                               ),
-                              icon: const Icon(Icons.restore_rounded, size: 17),
+                              icon: const Icon(
+                                Icons.restore_from_trash_rounded,
+                                size: 17,
+                              ),
                               onPressed: busy ? null : () => _restore([id]),
                             ),
                           ),
@@ -4096,11 +4184,12 @@ class _QueueScreenState extends State<QueueScreen> {
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: busy || selected.isEmpty
                       ? null
                       : () => _restore(selected.toList()),
-                  child: Text('恢复 ${selected.length} 项'),
+                  icon: const Icon(Icons.restore_from_trash_rounded),
+                  label: Text('恢复 ${selected.length} 项'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -4121,28 +4210,154 @@ class _QueueScreenState extends State<QueueScreen> {
   );
 }
 
-class QueuePreviewScreen extends StatelessWidget {
+class QueuePreviewScreen extends StatefulWidget {
   const QueuePreviewScreen(this.media, this.item, {super.key});
 
   final MediaRepository media;
   final MediaRecord item;
 
   @override
+  State<QueuePreviewScreen> createState() => _QueuePreviewScreenState();
+}
+
+class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
+  final transformation = TransformationController();
+  final pointers = <int>{};
+  Offset swipeOffset = Offset.zero;
+  bool zoomed = false;
+
+  @override
+  void dispose() {
+    transformation.dispose();
+    super.dispose();
+  }
+
+  void _updateZoom() {
+    final next = transformation.value.getMaxScaleOnAxis() > 1.01;
+    if (next != zoomed) setState(() => zoomed = next);
+  }
+
+  void _finishSwipe() {
+    if (!zoomed &&
+        swipeOffset.dy > 80 &&
+        swipeOffset.dy > swipeOffset.dx.abs() * 1.25) {
+      Navigator.maybePop(context);
+    }
+    swipeOffset = Offset.zero;
+  }
+
+  Widget _glass({required Widget child, EdgeInsets? padding}) => ClipRRect(
+    borderRadius: BorderRadius.circular(24),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0x52000000),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0x66FFFFFF)),
+        ),
+        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+      ),
+    ),
+  );
+
+  @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.light,
+    value: SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.black,
+    ),
     child: Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('全屏预览'),
-      ),
-      body: InteractiveViewer(
-        key: const Key('queue-preview-zoom'),
-        minScale: 1,
-        maxScale: 4,
-        boundaryMargin: const EdgeInsets.all(80),
-        child: SizedBox.expand(child: MediaView(media, item)),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Listener(
+            key: const Key('queue-preview-surface'),
+            onPointerDown: (event) {
+              pointers.add(event.pointer);
+              if (pointers.length == 1) swipeOffset = Offset.zero;
+            },
+            onPointerMove: (event) {
+              if (pointers.length == 1 && !zoomed) {
+                swipeOffset += event.delta;
+              }
+            },
+            onPointerUp: (event) {
+              final wasSinglePointer = pointers.length == 1;
+              pointers.remove(event.pointer);
+              if (wasSinglePointer) _finishSwipe();
+            },
+            onPointerCancel: (event) {
+              pointers.remove(event.pointer);
+              swipeOffset = Offset.zero;
+            },
+            child: InteractiveViewer(
+              key: const Key('queue-preview-zoom'),
+              transformationController: transformation,
+              minScale: 1,
+              maxScale: 4,
+              panEnabled: zoomed,
+              boundaryMargin: EdgeInsets.zero,
+              onInteractionUpdate: (_) => _updateZoom(),
+              onInteractionEnd: (_) {
+                if (transformation.value.getMaxScaleOnAxis() <= 1.01) {
+                  transformation.value = Matrix4.identity();
+                }
+                _updateZoom();
+              },
+              child: SizedBox.expand(
+                child: MediaView(widget.media, widget.item),
+              ),
+            ),
+          ),
+          SafeArea(
+            minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: _glass(
+                    child: IconButton(
+                      key: const Key('queue-preview-back'),
+                      tooltip: '返回待删除列表',
+                      onPressed: () => Navigator.maybePop(context),
+                      color: Colors.white,
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: _glass(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          '下滑返回待删除列表',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            shadows: _buttonTextShadows,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     ),
   );

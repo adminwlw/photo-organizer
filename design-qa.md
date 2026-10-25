@@ -119,3 +119,17 @@
 - P3：不同真实照片会改变毛玻璃底色；当前描边、阴影和选中底板可保持按钮边界，不阻塞交付。
 
 final result: passed
+
+## 双端分类、安全区与待删除预览验收（v0.1.26+27）
+
+- Android 实体机首页：`ui-preview/release-v0.1.26-home.png`。分类整理页已将“全部照片与视频”提升为 84dp 独立主入口，并展示视频、截屏、自拍、实况照片和相似照片；底部“更多”已改为“我的”。
+- Android 待删除队列：`ui-preview/release-v0.1.26-queue.png`。单项及批量恢复统一使用“从废纸篓恢复”图标。
+- Android 待删除预览：`ui-preview/release-v0.1.26-queue-preview.png`、`release-v0.1.26-queue-returned.png`。适配屏幕时锁定图片位置，放大后才允许平移；返回按钮位于安全区内，下滑 300px 成功返回队列。
+- 首尾提示：`ui-preview/release-v0.1.26-first-notice.png`。居中毛玻璃提示无文字下划线或黄线。
+- iOS 分类不再从本地文件特征推断：分类入口直接使用 PhotoKit 返回的智能相册名称和成员，覆盖全景、视频、收藏、延时、最近添加、连拍、慢动作、自拍、截屏、人像、实况、动图、长曝光、RAW、电影效果、空间媒体、ProRes、屏幕录制及 iOS 18 的收据、手写、插图、二维码；隐藏相册、无法上传和与主入口重复的系统图库不展示。
+- iOS 顶部浮动栏改用系统 `AppBar.primary` 安全区，整理页和待删除预览继续使用 `SafeArea`，不写死灵动岛高度。
+- 底部“全部”选中玻璃从 `0xB8E2E9FF` 调整为 `0x8FE2E9FF`；标准文字按钮、分类按钮、图库切换和底部导航文字统一增加轻投影。
+- `flutter analyze`：通过，无问题；`flutter test`：44 项全部通过。
+- Android 10 实体机已覆盖安装 `0.1.26+27` release 构建并完成上述页面和手势检查。iOS 运行时视觉仍需带灵动岛的真实设备最终确认。
+
+final result: passed with iOS device check pending
