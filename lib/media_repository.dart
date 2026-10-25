@@ -51,6 +51,66 @@ enum SystemCategoryKind {
   qrCodes,
 }
 
+String systemCategoryLabel(
+  SystemCategoryKind kind, {
+  required String providerLabel,
+  required String languageCode,
+}) {
+  if (languageCode.toLowerCase().startsWith('zh')) {
+    return switch (kind) {
+      SystemCategoryKind.generic => '系统分类',
+      SystemCategoryKind.panoramas => '全景照片',
+      SystemCategoryKind.videos => '视频',
+      SystemCategoryKind.favorites => '个人收藏',
+      SystemCategoryKind.timelapses => '延时摄影',
+      SystemCategoryKind.recentlyAdded => '最近添加',
+      SystemCategoryKind.bursts => '连拍快照',
+      SystemCategoryKind.slowMotion => '慢动作',
+      SystemCategoryKind.screenshots => '截屏',
+      SystemCategoryKind.live => '实况照片',
+      SystemCategoryKind.selfies => '自拍',
+      SystemCategoryKind.portraits => '人像',
+      SystemCategoryKind.animated => '动图',
+      SystemCategoryKind.longExposures => '长曝光',
+      SystemCategoryKind.raw => 'RAW',
+      SystemCategoryKind.cinematic => '电影效果',
+      SystemCategoryKind.spatial => '空间',
+      SystemCategoryKind.proRes => 'ProRes',
+      SystemCategoryKind.screenRecordings => '屏幕录制',
+      SystemCategoryKind.receipts => '收据',
+      SystemCategoryKind.handwriting => '手写内容',
+      SystemCategoryKind.illustrations => '插图',
+      SystemCategoryKind.qrCodes => '二维码',
+    };
+  }
+  if (providerLabel.isNotEmpty) return providerLabel;
+  return switch (kind) {
+    SystemCategoryKind.generic => 'Smart Album',
+    SystemCategoryKind.panoramas => 'Panoramas',
+    SystemCategoryKind.videos => 'Videos',
+    SystemCategoryKind.favorites => 'Favorites',
+    SystemCategoryKind.timelapses => 'Time-lapse',
+    SystemCategoryKind.recentlyAdded => 'Recently Added',
+    SystemCategoryKind.bursts => 'Bursts',
+    SystemCategoryKind.slowMotion => 'Slo-mo',
+    SystemCategoryKind.screenshots => 'Screenshots',
+    SystemCategoryKind.live => 'Live Photos',
+    SystemCategoryKind.selfies => 'Selfies',
+    SystemCategoryKind.portraits => 'Portrait',
+    SystemCategoryKind.animated => 'Animated',
+    SystemCategoryKind.longExposures => 'Long Exposure',
+    SystemCategoryKind.raw => 'RAW',
+    SystemCategoryKind.cinematic => 'Cinematic',
+    SystemCategoryKind.spatial => 'Spatial',
+    SystemCategoryKind.proRes => 'ProRes',
+    SystemCategoryKind.screenRecordings => 'Screen Recordings',
+    SystemCategoryKind.receipts => 'Receipts',
+    SystemCategoryKind.handwriting => 'Handwriting',
+    SystemCategoryKind.illustrations => 'Illustrations',
+    SystemCategoryKind.qrCodes => 'QR Codes',
+  };
+}
+
 SystemCategoryKind? iosSystemCategoryKind(
   PMDarwinAssetCollectionSubtype? subtype,
 ) => switch (subtype) {
@@ -173,6 +233,8 @@ List<List<String>> groupSimilarPhotoHashes(
 }
 
 class MediaRepository {
+  bool get supportsLivePhotoPlayback => Platform.isIOS;
+
   Future<PermissionState> permission() => PhotoManager.getPermissionState(
     requestOption: const PermissionRequestOption(),
   );
@@ -553,6 +615,13 @@ class MediaRepository {
     final asset = await get(id);
     if (asset?.type != AssetType.video) return null;
     return asset!.loadFile(isOrigin: false);
+  }
+
+  Future<File?> livePhotoVideoFile(String id) async {
+    if (!supportsLivePhotoPlayback) return null;
+    final asset = await get(id);
+    if (asset?.isLivePhoto != true) return null;
+    return asset!.fileWithSubtype;
   }
 
   Future<bool> usesRecoverableTrash() async {

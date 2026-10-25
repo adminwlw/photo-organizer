@@ -231,7 +231,7 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: '相册清理',
+    title: '相册删除',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       colorScheme: ColorScheme.fromSeed(
@@ -541,6 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _sectionTitle(String title, {String? subtitle}) => Padding(
+    key: ValueKey('section-$title'),
     padding: const EdgeInsets.fromLTRB(2, 26, 2, 14),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -559,6 +560,30 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
       ],
     ),
+  );
+
+  Widget _brandHeader() => Row(
+    key: const Key('home-brand'),
+    children: [
+      ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset(
+          'assets/app-logo.png',
+          key: const Key('home-brand-logo'),
+          width: 44,
+          height: 44,
+        ),
+      ),
+      const SizedBox(width: 11),
+      const Text(
+        '相册删除',
+        style: TextStyle(
+          color: Color(0xFF10131A),
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    ],
   );
 
   Widget _scopeTile(
@@ -779,8 +804,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
                 : null,
             child: Ink(
-              height: 128,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              height: 96,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: const Color(0xFFF0F4FF),
                 borderRadius: BorderRadius.circular(24),
@@ -789,8 +814,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 children: [
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 44,
+                    height: 44,
                     decoration: const BoxDecoration(
                       color: Color(0xFF1557F8),
                       shape: BoxShape.circle,
@@ -798,10 +823,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: const Icon(
                       Icons.photo_library_rounded,
                       color: Colors.white,
-                      size: 26,
+                      size: 23,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 13),
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -811,7 +836,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           hasProgress ? '继续整理' : '开始整理',
                           style: const TextStyle(
                             color: Color(0xFF10131A),
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -835,8 +860,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 12),
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: enabled
                           ? const Color(0xFF1557F8)
@@ -846,7 +871,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: const Icon(
                       Icons.arrow_forward_rounded,
                       color: Colors.white,
-                      size: 21,
+                      size: 20,
                     ),
                   ),
                 ],
@@ -858,34 +883,11 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  String _categoryLabel(SystemCategorySummary category) {
-    if (category.label.isNotEmpty) return category.label;
-    return switch (category.kind) {
-      SystemCategoryKind.generic => '系统分类',
-      SystemCategoryKind.panoramas => '全景照片',
-      SystemCategoryKind.videos => '视频',
-      SystemCategoryKind.favorites => '个人收藏',
-      SystemCategoryKind.timelapses => '延时摄影',
-      SystemCategoryKind.recentlyAdded => '最近添加',
-      SystemCategoryKind.bursts => '连拍快照',
-      SystemCategoryKind.slowMotion => '慢动作',
-      SystemCategoryKind.screenshots => '截屏',
-      SystemCategoryKind.live => '实况照片',
-      SystemCategoryKind.selfies => '自拍',
-      SystemCategoryKind.portraits => '人像',
-      SystemCategoryKind.animated => '动图',
-      SystemCategoryKind.longExposures => '长曝光',
-      SystemCategoryKind.raw => 'RAW',
-      SystemCategoryKind.cinematic => '电影效果',
-      SystemCategoryKind.spatial => '空间',
-      SystemCategoryKind.proRes => 'ProRes',
-      SystemCategoryKind.screenRecordings => '屏幕录制',
-      SystemCategoryKind.receipts => '收据',
-      SystemCategoryKind.handwriting => '手写内容',
-      SystemCategoryKind.illustrations => '插图',
-      SystemCategoryKind.qrCodes => '二维码',
-    };
-  }
+  String _categoryLabel(SystemCategorySummary category) => systemCategoryLabel(
+    category.kind,
+    providerLabel: category.label,
+    languageCode: ui.PlatformDispatcher.instance.locale.languageCode,
+  );
 
   IconData _categoryIcon(SystemCategoryKind kind) => switch (kind) {
     SystemCategoryKind.generic => Icons.auto_awesome_outlined,
@@ -1099,6 +1101,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _allMediaCategoryTile() => FutureBuilder<int>(
+    key: const Key('home-all-media-card'),
     future: app.store.count(Scope.all),
     builder: (context, count) => Material(
       color: Colors.transparent,
@@ -1106,99 +1109,102 @@ class _HomeScreenState extends State<HomeScreen> {
         key: const ValueKey('category-all'),
         borderRadius: BorderRadius.circular(22),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
-        child: Ink(
-          height: 148,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0F4FF),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFDCE5FF)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(21),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                FutureBuilder<List<MediaRecord>>(
-                  future: allMediaCover,
-                  builder: (context, snapshot) =>
-                      _allMediaMosaic(snapshot.data ?? const []),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 72,
-                  child: ClipRect(
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.38),
-                              Colors.white.withValues(alpha: 0.91),
-                            ],
+        child: AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F4FF),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFDCE5FF)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(21),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  FutureBuilder<List<MediaRecord>>(
+                    future: allMediaCover,
+                    builder: (context, snapshot) =>
+                        _allMediaMosaic(snapshot.data ?? const []),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 72,
+                    child: ClipRect(
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+                        child: DecoratedBox(
+                          key: const Key('all-media-title-gradient'),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.white.withValues(alpha: 0.94),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 12,
-                  bottom: 13,
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.photo_library_outlined,
-                        color: Color(0xFF1557F8),
-                        size: 25,
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          '全部照片与视频',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Color(0xFF10131A),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
+                  Positioned(
+                    left: 16,
+                    right: 12,
+                    bottom: 13,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.photo_library_outlined,
+                          color: Color(0xFF1557F8),
+                          size: 25,
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            '全部照片与视频',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFF10131A),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              shadows: _buttonTextShadows,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          count.hasData ? '${count.data}' : '读取中',
+                          style: const TextStyle(
+                            color: Color(0xFF687086),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                             shadows: _buttonTextShadows,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        count.hasData ? '${count.data}' : '读取中',
-                        style: const TextStyle(
-                          color: Color(0xFF687086),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          shadows: _buttonTextShadows,
+                        const SizedBox(width: 10),
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF1557F8),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1557F8),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1241,17 +1247,9 @@ class _HomeScreenState extends State<HomeScreen> {
     itemBuilder: (context, index) => children[index],
   );
 
-  Widget _categoryLayout(List<Widget> categories) => Column(
-    children: [
-      _allMediaCategoryTile(),
-      const SizedBox(height: 10),
-      _compactCategoryGrid(categories),
-    ],
-  );
-
   Widget _categoryGrid() {
     if (!Platform.isIOS) {
-      return _categoryLayout([
+      return _compactCategoryGrid([
         _scopeCategoryTile(Scope.videos, Icons.play_circle_outline),
         _scopeCategoryTile(Scope.screenshots, Icons.screenshot_outlined),
         _scopeCategoryTile(Scope.selfies, Icons.face_outlined),
@@ -1269,7 +1267,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         final categories = snapshot.data ?? const <SystemCategorySummary>[];
-        return _categoryLayout([
+        return _compactCategoryGrid([
           ...categories.map(_systemCategoryTile),
           _similarCategoryTile(),
         ]);
@@ -1300,7 +1298,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      _brandHeader(),
+      const SizedBox(height: 14),
       _reviewHero(),
+      const SizedBox(height: 14),
+      _allMediaCategoryTile(),
       _sectionTitle('分类整理'),
       _categoryGrid(),
       _sectionTitle('整理进度'),
@@ -3864,6 +3866,11 @@ class MediaView extends StatefulWidget {
 class _MediaViewState extends State<MediaView> {
   VideoPlayerController? player;
   bool loading = false;
+  bool livePhotoPressed = false;
+  bool livePhotoPlaying = false;
+
+  bool get canPlayLivePhoto =>
+      widget.item.live && widget.media.supportsLivePhotoPlayback;
 
   @override
   void initState() {
@@ -3906,6 +3913,48 @@ class _MediaViewState extends State<MediaView> {
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  Future<void> _startLivePhoto() async {
+    if (!canPlayLivePhoto || loading) return;
+    livePhotoPressed = true;
+    final existing = player;
+    if (existing != null) {
+      await existing.seekTo(Duration.zero);
+      if (!livePhotoPressed) return;
+      await existing.play();
+      if (mounted) setState(() => livePhotoPlaying = true);
+      return;
+    }
+    setState(() => loading = true);
+    try {
+      final file = await widget.media.livePhotoVideoFile(widget.item.id);
+      if (file == null || !livePhotoPressed) return;
+      final controller = VideoPlayerController.file(file);
+      await controller.initialize();
+      if (!mounted || !livePhotoPressed) {
+        await controller.dispose();
+        return;
+      }
+      player = controller;
+      await controller.play();
+      if (mounted) setState(() => livePhotoPlaying = true);
+    } catch (_) {
+      // Keep the still image visible when the paired motion resource is unavailable.
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _stopLivePhoto() async {
+    if (!canPlayLivePhoto) return;
+    livePhotoPressed = false;
+    final controller = player;
+    if (controller != null) {
+      await controller.pause();
+      await controller.seekTo(Duration.zero);
+    }
+    if (mounted) setState(() => livePhotoPlaying = false);
   }
 
   String _formatDuration(Duration value) {
@@ -3966,7 +4015,10 @@ class _MediaViewState extends State<MediaView> {
 
   @override
   Widget build(BuildContext context) {
-    final media = player?.value.isInitialized == true
+    final showVideo =
+        player?.value.isInitialized == true &&
+        (widget.item.type == 2 || livePhotoPlaying);
+    final media = showVideo
         ? AspectRatio(
             aspectRatio: player!.value.aspectRatio,
             child: VideoPlayer(player!),
@@ -3982,73 +4034,80 @@ class _MediaViewState extends State<MediaView> {
             showPlaceholderIcon: false,
           );
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: DecoratedBox(
-              key: const Key('media-surface-shadow'),
-              decoration: const BoxDecoration(
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x3D000000),
-                    blurRadius: 24,
-                    spreadRadius: 1,
-                    offset: Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    media,
-                    if (widget.item.type == 2)
-                      Positioned.fill(
-                        child: Center(
-                          child: IconButton.filledTonal(
-                            tooltip: player?.value.isPlaying == true
-                                ? '暂停视频'
-                                : '播放视频',
-                            onPressed: loading ? null : _play,
-                            icon: loading
-                                ? const CircularProgressIndicator()
-                                : Icon(
-                                    player?.value.isPlaying == true
-                                        ? Icons.pause
-                                        : Icons.play_arrow,
-                                  ),
-                          ),
-                        ),
-                      ),
-                    if (widget.item.type == 2)
-                      Positioned(
-                        key: const Key('video-progress'),
-                        left: 18,
-                        right: 18,
-                        bottom: widget.videoProgressBottom,
-                        child: DefaultTextStyle(
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            shadows: [
-                              Shadow(color: Colors.black87, blurRadius: 6),
-                            ],
-                          ),
-                          child: _videoProgress(),
-                        ),
-                      ),
+    return GestureDetector(
+      key: canPlayLivePhoto ? const Key('live-photo-hold-target') : null,
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: canPlayLivePhoto ? (_) => _startLivePhoto() : null,
+      onLongPressEnd: canPlayLivePhoto ? (_) => _stopLivePhoto() : null,
+      onLongPressCancel: canPlayLivePhoto ? _stopLivePhoto : null,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: DecoratedBox(
+                key: const Key('media-surface-shadow'),
+                decoration: const BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x3D000000),
+                      blurRadius: 24,
+                      spreadRadius: 1,
+                      offset: Offset(0, 10),
+                    ),
                   ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      media,
+                      if (widget.item.type == 2)
+                        Positioned.fill(
+                          child: Center(
+                            child: IconButton.filledTonal(
+                              tooltip: player?.value.isPlaying == true
+                                  ? '暂停视频'
+                                  : '播放视频',
+                              onPressed: loading ? null : _play,
+                              icon: loading
+                                  ? const CircularProgressIndicator()
+                                  : Icon(
+                                      player?.value.isPlaying == true
+                                          ? Icons.pause
+                                          : Icons.play_arrow,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      if (widget.item.type == 2)
+                        Positioned(
+                          key: const Key('video-progress'),
+                          left: 18,
+                          right: 18,
+                          bottom: widget.videoProgressBottom,
+                          child: DefaultTextStyle(
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              shadows: [
+                                Shadow(color: Colors.black87, blurRadius: 6),
+                              ],
+                            ),
+                            child: _videoProgress(),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -4074,6 +4133,8 @@ class _QueueScreenState extends State<QueueScreen> {
   bool selectionDragActive = false;
   bool selectionDragValue = true;
   String? suppressCheckboxId;
+  Timer? selectionAutoScrollTimer;
+  Offset? selectionDragPosition;
 
   @override
   void initState() {
@@ -4083,6 +4144,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   void dispose() {
+    selectionAutoScrollTimer?.cancel();
     queueScroll.dispose();
     super.dispose();
   }
@@ -4094,6 +4156,7 @@ class _QueueScreenState extends State<QueueScreen> {
     selectionStartPosition = event.position;
     selectionBase = Set.of(selected);
     selectionDragActive = false;
+    selectionDragPosition = null;
     suppressCheckboxId = null;
   }
 
@@ -4118,20 +4181,10 @@ class _QueueScreenState extends State<QueueScreen> {
     return index >= 0 && index < rows.length ? index : null;
   }
 
-  void _selectionPointerMove(PointerMoveEvent event) {
+  void _applySelectionAt(Offset position) {
     final start = selectionStartIndex;
-    final origin = selectionStartPosition;
-    if (event.pointer != selectionPointer || start == null || origin == null) {
-      return;
-    }
-    if (!selectionDragActive && (event.position - origin).distance < 6) return;
-    if (!selectionDragActive) {
-      selectionDragActive = true;
-      final startId = rows[start]['media_id'] as String;
-      selectionDragValue = !selectionBase.contains(startId);
-      suppressCheckboxId = startId;
-    }
-    final target = _queueIndexAt(event.position);
+    if (start == null) return;
+    final target = _queueIndexAt(position);
     if (target == null) return;
     final next = Set<String>.of(selectionBase);
     final first = start < target ? start : target;
@@ -4148,12 +4201,71 @@ class _QueueScreenState extends State<QueueScreen> {
     });
   }
 
+  void _startSelectionAutoScroll() {
+    selectionAutoScrollTimer ??= Timer.periodic(
+      const Duration(milliseconds: 16),
+      (_) {
+        final position = selectionDragPosition;
+        final box =
+            queueGridKey.currentContext?.findRenderObject() as RenderBox?;
+        if (!selectionDragActive ||
+            position == null ||
+            box == null ||
+            !box.hasSize ||
+            !queueScroll.hasClients) {
+          return;
+        }
+        final local = box.globalToLocal(position);
+        const edge = 72.0;
+        double delta = 0;
+        if (local.dy < edge) {
+          delta = -((edge - local.dy) / edge * 14).clamp(3, 14).toDouble();
+        } else if (local.dy > box.size.height - edge) {
+          delta = ((local.dy - (box.size.height - edge)) / edge * 14)
+              .clamp(3, 14)
+              .toDouble();
+        }
+        if (delta == 0) return;
+        final next = (queueScroll.offset + delta)
+            .clamp(
+              queueScroll.position.minScrollExtent,
+              queueScroll.position.maxScrollExtent,
+            )
+            .toDouble();
+        if (next == queueScroll.offset) return;
+        queueScroll.jumpTo(next);
+        _applySelectionAt(position);
+      },
+    );
+  }
+
+  void _selectionPointerMove(PointerMoveEvent event) {
+    final start = selectionStartIndex;
+    final origin = selectionStartPosition;
+    if (event.pointer != selectionPointer || start == null || origin == null) {
+      return;
+    }
+    if (!selectionDragActive && (event.position - origin).distance < 6) return;
+    if (!selectionDragActive) {
+      selectionDragActive = true;
+      final startId = rows[start]['media_id'] as String;
+      selectionDragValue = !selectionBase.contains(startId);
+      suppressCheckboxId = startId;
+      _startSelectionAutoScroll();
+    }
+    selectionDragPosition = event.position;
+    _applySelectionAt(event.position);
+  }
+
   void _selectionPointerEnd(PointerEvent event) {
     if (event.pointer != selectionPointer) return;
     selectionPointer = null;
     selectionStartIndex = null;
     selectionStartPosition = null;
     selectionDragActive = false;
+    selectionDragPosition = null;
+    selectionAutoScrollTimer?.cancel();
+    selectionAutoScrollTimer = null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       suppressCheckboxId = null;
     });
@@ -4809,7 +4921,7 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('隐私说明'),
                   onTap: () => showAboutDialog(
                     context: context,
-                    applicationName: '相册清理',
+                    applicationName: '相册删除',
                     children: [
                       const Text('照片和视频仅在本机读取与显示；整理标记保存在本机。删除必须经过队列复核和系统确认。'),
                     ],

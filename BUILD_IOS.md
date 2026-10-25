@@ -2,7 +2,7 @@
 
 ## 当前配置
 
-- App 名称：相册清理
+- App 名称：相册删除
 - Bundle ID：`com.sim360.albumcleaner.albumCleaner`
 - 版本：`0.1.28+29`
 - 最低系统：iOS 15.0

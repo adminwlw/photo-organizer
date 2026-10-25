@@ -195,3 +195,33 @@ final result: passed
 - 主交互：启动、首页加载、进入队列、单项撤回布局、连续拖选 3 项、底部批量按钮状态均已检查。
 
 final result: passed
+
+---
+
+# v0.1.29 设计与交互验收
+
+## 真机证据
+
+- 首页：`ui-preview/release-v0.1.29-home.png`，华为 MED-AL00、Android 10、真实相册数据。
+- 待删除队列默认态：`ui-preview/release-v0.1.29-queue.png`。
+- 待删除队列触边拖选结果：`ui-preview/release-v0.1.29-queue-drag.png`。
+- 视口为 `720 x 1600` 物理像素，Flutter 逻辑宽度约 `360dp`。
+
+## Findings
+
+- 首页已显示最终选定 Logo 与暂定名称“相册删除”；Logo 在小尺寸下轮廓清晰，名称没有截断。
+- “继续整理”卡片高度缩至 `96dp`，主次信息仍完整可读。
+- “全部照片与视频”已移到“分类整理”之前，真机尺寸为 4:3；三张真实媒体封面、数量和入口按钮均正常。
+- 标题底色由上方完全透明渐变到下方白色，文字在复杂照片上保持可读。
+- 真机从第一项右上角选择框连续拖到网格下边缘，列表自动滚动至末尾并选中全部 33 项；底部同步显示“恢复 33 项 / 删除 33 项”。验证后已取消全选，没有执行删除。
+- Android 不伪造 Live Photo 能力；长按播放仅在 iOS 的真实 PhotoKit Live Photo 上启用。Windows 无法完成 iOS 真机播放验收。
+- 无 P0/P1/P2 遗留问题。
+
+## Verification
+
+- `flutter test`：48/48 通过。
+- `flutter analyze`：无问题。
+- Android release：ARM32/ARM64 构建成功，真机覆盖安装成功。
+- 真机版本：`versionName=0.1.29`，`versionCode=30`；应用标签为“相册删除”。
+
+final result: passed with iOS Live Photo device check pending

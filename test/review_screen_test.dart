@@ -12,6 +12,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class FakeMediaRepository extends MediaRepository {
   int videoFileRequests = 0;
+  int livePhotoFileRequests = 0;
+
+  @override
+  bool get supportsLivePhotoPlayback => true;
 
   @override
   Future<List<SystemAlbumSummary>> systemAlbums() async => const [];
@@ -25,6 +29,12 @@ class FakeMediaRepository extends MediaRepository {
   @override
   Future<File?> videoFile(String id) async {
     videoFileRequests++;
+    return null;
+  }
+
+  @override
+  Future<File?> livePhotoVideoFile(String id) async {
+    livePhotoFileRequests++;
     return null;
   }
 }
@@ -384,6 +394,17 @@ const video = MediaRecord(
   live: false,
 );
 
+const livePhoto = MediaRecord(
+  id: 'live-photo',
+  takenAt: 1000,
+  month: '2026-10',
+  type: 1,
+  duration: 0,
+  screenshot: false,
+  selfie: false,
+  live: true,
+);
+
 void main() {
   late Database database;
 
@@ -421,6 +442,39 @@ void main() {
     await tester.pump();
 
     expect(media.videoFileRequests, 0);
+  });
+
+  testWidgets('a live photo requests its motion clip while held', (
+    tester,
+  ) async {
+    final media = FakeMediaRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: MediaView(media, livePhoto))),
+    );
+    await tester.longPress(find.byKey(const Key('live-photo-hold-target')));
+    await tester.pump();
+
+    expect(media.livePhotoFileRequests, 1);
+  });
+
+  test('system category labels follow the requested language', () {
+    expect(
+      systemCategoryLabel(
+        SystemCategoryKind.favorites,
+        providerLabel: 'Favorites',
+        languageCode: 'zh',
+      ),
+      '个人收藏',
+    );
+    expect(
+      systemCategoryLabel(
+        SystemCategoryKind.favorites,
+        providerLabel: 'Favorites',
+        languageCode: 'en',
+      ),
+      'Favorites',
+    );
   });
 
   testWidgets('review shows only a shadowed media surface above controls', (
@@ -1103,8 +1157,56 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('category-grid')), findsOneWidget);
+    expect(find.byKey(const Key('home-brand')), findsOneWidget);
+    expect(find.byKey(const Key('home-brand-logo')), findsOneWidget);
+    expect(find.text('相册删除'), findsOneWidget);
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
+    final allMediaSize = tester.getSize(
+      find.byKey(const ValueKey('category-all')),
+    );
+    expect(
+      allMediaSize.width / allMediaSize.height,
+      moreOrLessEquals(4 / 3, epsilon: 0.01),
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('review-hero'))).height,
+      lessThanOrEqualTo(100),
+    );
+    final allMediaGradient = tester.widget<DecoratedBox>(
+      find.byKey(const Key('all-media-title-gradient')),
+    );
+    final gradient = (allMediaGradient.decoration as BoxDecoration).gradient!;
+    expect((gradient as LinearGradient).colors.first.a, 0);
+    expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
+    expect(find.byKey(const ValueKey('all-media-cover-video')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('all-media-cover-next-photo')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('all-media-cover-video-marker-video')),
+      findsOneWidget,
+    );
+    final homeList = tester.widget<ListView>(find.byType(ListView));
+    final homeChildren =
+        (homeList.childrenDelegate as SliverChildListDelegate).children;
+    expect(
+      homeChildren.indexWhere(
+        (child) => child.key == const Key('home-all-media-card'),
+      ),
+      lessThan(
+        homeChildren.indexWhere(
+          (child) => child.key == const ValueKey('section-分类整理'),
+        ),
+      ),
+    );
+    expect(find.text('全部照片与视频'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('category-grid')),
+      300,
+    );
+    expect(find.byKey(const Key('category-grid')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('category-category:video')),
       findsOneWidget,
@@ -1122,29 +1224,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('category-similar')), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const ValueKey('category-all'))).height,
-      148,
-    );
-    expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
-    expect(find.byKey(const ValueKey('all-media-cover-video')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('all-media-cover-next-photo')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('all-media-cover-video-marker-video')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .getTopLeft(find.byKey(const ValueKey('category-category:video')))
-          .dy,
-      greaterThan(
-        tester.getBottomLeft(find.byKey(const ValueKey('category-all'))).dy,
-      ),
-    );
-    expect(find.text('全部照片与视频'), findsOneWidget);
 
     await tester.tap(find.text('相册'));
     await tester.pumpAndSettle();
@@ -1217,8 +1296,10 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('category-similar')));
-    await tester.drag(find.byType(ListView).first, const Offset(0, -120));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('category-similar')),
+      300,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('category-similar')));
     await tester.pumpAndSettle();
@@ -1526,6 +1607,39 @@ void main() {
     expect(store.ids, ['photo']);
     expect(find.byType(SnackBar), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('drag selection auto-scrolls while held at the queue edge', (
+    tester,
+  ) async {
+    final store = QueueAppStore(
+      database,
+      List.generate(60, (index) => 'queued-$index'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueueScreen(CleanerState(store, FakeMediaRepository())),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final gridFinder = find.byType(GridView);
+    final grid = tester.widget<GridView>(gridFinder);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('queue-select-queued-0'))),
+    );
+    await gesture.moveTo(
+      Offset(
+        tester.getCenter(gridFinder).dx,
+        tester.getBottomLeft(gridFinder).dy - 8,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(grid.controller!.offset, greaterThan(0));
+
+    await gesture.up();
+    await tester.pump();
   });
 
   testWidgets(
