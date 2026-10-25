@@ -225,3 +225,31 @@ final result: passed
 - 真机版本：`versionName=0.1.29`，`versionCode=30`；应用标签为“相册删除”。
 
 final result: passed with iOS Live Photo device check pending
+
+---
+
+# v0.1.30 待删除队列操作验收
+
+## 真机证据
+
+- 待删除队列：`ui-preview/release-v0.1.30-queue.png`，华为 MED-AL00、Android 10、真实相册数据。
+- 单项全屏预览：`ui-preview/release-v0.1.30-preview.png`。
+- 无障碍结构：`ui-preview/release-v0.1.30-queue.xml`、`ui-preview/release-v0.1.30-preview.xml`、`ui-preview/release-v0.1.30-after-swipe.xml`。
+
+## Findings
+
+- 缩略图右上角选择框保留，底部常驻的单项撤回圆标已移除；队列网格更干净，没有重复操作入口。
+- 批量操作由“恢复”改为“保留”，真机默认态正确显示“保留 0 项 / 删除 0 项”。
+- 点击缩略图进入全屏预览后，“保留此项 / 删除此项”两个 52dp 操作按钮完整可读，下滑返回提示仍清楚可见。
+- 真机下滑成功返回待删除队列，33 项数据保持不变；验收未执行真实删除。
+- 单项删除继续复用原有应用确认、系统处理和结果反馈链路，没有新增静默删除路径。
+- 无 P0/P1/P2 遗留问题。
+
+## Verification
+
+- `flutter test`：50/50 通过。
+- `flutter analyze`：无问题。
+- Android release：ARM32/ARM64 构建成功，真机覆盖安装成功。
+- APK 包内信息：`versionName=0.1.30`，`versionCode=31`；应用标签为“相册删除”。
+
+final result: passed with iOS device check pending

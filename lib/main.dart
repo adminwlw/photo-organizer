@@ -4281,10 +4281,10 @@ class _QueueScreenState extends State<QueueScreen> {
     }
   }
 
-  Future<void> _restore(Iterable<String> ids) async {
-    if (busy) return;
+  Future<bool> _restore(Iterable<String> ids) async {
+    if (busy) return false;
     final restored = ids.toSet();
-    if (restored.isEmpty) return;
+    if (restored.isEmpty) return false;
     setState(() => busy = true);
     try {
       for (final id in restored) {
@@ -4292,6 +4292,7 @@ class _QueueScreenState extends State<QueueScreen> {
       }
       selected.removeAll(restored);
       await _load();
+      return true;
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -4315,16 +4316,22 @@ class _QueueScreenState extends State<QueueScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => QueuePreviewScreen(widget.app.media, media),
+        builder: (_) => QueuePreviewScreen(
+          widget.app.media,
+          media,
+          onKeep: () => _restore([id]),
+          onDelete: () => _process([id]),
+        ),
       ),
     );
   }
 
-  Future<void> _process() async {
-    if (busy || selected.isEmpty) return;
-    final ids = selected.toList();
+  Future<bool> _process(Iterable<String> targets) async {
+    if (busy) return false;
+    final ids = targets.toSet().toList();
+    if (ids.isEmpty) return false;
     final usesTrash = await widget.app.media.usesRecoverableTrash();
-    if (!mounted) return;
+    if (!mounted) return false;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -4348,7 +4355,7 @@ class _QueueScreenState extends State<QueueScreen> {
         ],
       ),
     );
-    if (accepted != true || !mounted) return;
+    if (accepted != true || !mounted) return false;
     setState(() => busy = true);
     try {
       final sizes = await widget.app.media.mediaSizes(ids);
@@ -4358,7 +4365,7 @@ class _QueueScreenState extends State<QueueScreen> {
       );
       await widget.app.refresh();
       await _load();
-      if (!mounted) return;
+      if (!mounted) return false;
       final counts = <String, int>{};
       for (final status in result.values) {
         counts[status] = (counts[status] ?? 0) + 1;
@@ -4431,12 +4438,14 @@ class _QueueScreenState extends State<QueueScreen> {
           ],
         ),
       );
+      return true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('系统处理未完成，请检查权限并在队列中核对状态。')),
         );
       }
+      return false;
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -4577,27 +4586,6 @@ class _QueueScreenState extends State<QueueScreen> {
                               ),
                             ),
                           ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 5,
-                            child: Center(
-                              child: IconButton.filled(
-                                key: ValueKey('queue-restore-$id'),
-                                tooltip: '撤回此项',
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.black45,
-                                  foregroundColor: Colors.white,
-                                  fixedSize: const Size.square(32),
-                                  padding: EdgeInsets.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                icon: const Icon(Icons.undo_rounded, size: 18),
-                                onPressed: busy ? null : () => _restore([id]),
-                              ),
-                            ),
-                          ),
                           if (row['status'] == 'unknown' ||
                               row['status'] == 'missing')
                             Positioned(
@@ -4644,7 +4632,7 @@ class _QueueScreenState extends State<QueueScreen> {
                         ? null
                         : () => _restore(selected.toList()),
                     icon: const Icon(Icons.undo_rounded),
-                    label: Text('恢复 ${selected.length} 项'),
+                    label: Text('保留 ${selected.length} 项'),
                   ),
                 ),
               ),
@@ -4658,7 +4646,9 @@ class _QueueScreenState extends State<QueueScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFDC3D55),
                     ),
-                    onPressed: busy || selected.isEmpty ? null : _process,
+                    onPressed: busy || selected.isEmpty
+                        ? null
+                        : () => _process(selected),
                     child: Text(busy ? '等待系统处理…' : '删除 ${selected.length} 项'),
                   ),
                 ),
@@ -4672,10 +4662,18 @@ class _QueueScreenState extends State<QueueScreen> {
 }
 
 class QueuePreviewScreen extends StatefulWidget {
-  const QueuePreviewScreen(this.media, this.item, {super.key});
+  const QueuePreviewScreen(
+    this.media,
+    this.item, {
+    super.key,
+    required this.onKeep,
+    required this.onDelete,
+  });
 
   final MediaRepository media;
   final MediaRecord item;
+  final Future<bool> Function() onKeep;
+  final Future<bool> Function() onDelete;
 
   @override
   State<QueuePreviewScreen> createState() => _QueuePreviewScreenState();
@@ -4686,6 +4684,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
   final pointers = <int>{};
   Offset swipeOffset = Offset.zero;
   bool zoomed = false;
+  bool busy = false;
 
   @override
   void dispose() {
@@ -4705,6 +4704,17 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
       Navigator.maybePop(context);
     }
     swipeOffset = Offset.zero;
+  }
+
+  Future<void> _act(Future<bool> Function() action) async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      final changed = await action();
+      if (changed && mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   Widget _glass({required Widget child, EdgeInsets? padding}) => ClipRRect(
@@ -4790,26 +4800,76 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
                 ),
                 Align(
                   alignment: Alignment.bottomCenter,
-                  child: _glass(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    child: const Row(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          '下滑返回待删除列表',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            shadows: _buttonTextShadows,
+                        _glass(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
                           ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 5),
+                              Text(
+                                '下滑返回待删除列表',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  shadows: _buttonTextShadows,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: 52,
+                                child: OutlinedButton.icon(
+                                  key: const Key('queue-preview-keep'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    backgroundColor: Colors.black54,
+                                    side: const BorderSide(
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                  onPressed: busy
+                                      ? null
+                                      : () => _act(widget.onKeep),
+                                  icon: const Icon(Icons.undo_rounded),
+                                  label: const Text('保留此项'),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: SizedBox(
+                                height: 52,
+                                child: FilledButton.icon(
+                                  key: const Key('queue-preview-delete'),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC3D55),
+                                  ),
+                                  onPressed: busy
+                                      ? null
+                                      : () => _act(widget.onDelete),
+                                  icon: const Icon(Icons.delete_outline),
+                                  label: const Text('删除此项'),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

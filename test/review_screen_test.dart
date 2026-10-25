@@ -24,6 +24,10 @@ class FakeMediaRepository extends MediaRepository {
   Future<List<SystemCategorySummary>> systemCategories() async => const [];
 
   @override
+  Future<AssetEntity?> get(String id) async =>
+      AssetEntity(id: id, typeInt: AssetType.image.index, width: 1, height: 1);
+
+  @override
   Future<Uint8List?> thumbnail(String id, int width, int height) async => null;
 
   @override
@@ -1552,14 +1556,14 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byIcon(Icons.undo_rounded), findsNWidgets(3));
+    expect(find.byIcon(Icons.undo_rounded), findsOneWidget);
     expect(tester.widget<AppBar>(find.byType(AppBar)).primary, isTrue);
-    expect(find.text('恢复 0 项'), findsOneWidget);
+    expect(find.text('保留 0 项'), findsOneWidget);
     expect(find.text('删除 0 项'), findsOneWidget);
 
     final firstItem = find.byKey(const ValueKey('queue-item-photo'));
     final firstSelector = find.byKey(const ValueKey('queue-select-photo'));
-    final firstRestore = find.byKey(const ValueKey('queue-restore-photo'));
+    expect(find.byKey(const ValueKey('queue-restore-photo')), findsNothing);
     expect(
       tester.getCenter(firstSelector).dx,
       greaterThan(tester.getCenter(firstItem).dx),
@@ -1568,15 +1572,6 @@ void main() {
       tester.getCenter(firstSelector).dy,
       lessThan(tester.getCenter(firstItem).dy),
     );
-    expect(
-      tester.getCenter(firstRestore).dx,
-      moreOrLessEquals(tester.getCenter(firstItem).dx, epsilon: 2),
-    );
-    expect(
-      tester.getCenter(firstRestore).dy,
-      greaterThan(tester.getCenter(firstItem).dy),
-    );
-
     final restoreButton = find.byKey(const Key('queue-restore-selected'));
     final deleteButton = find.byKey(const Key('queue-delete-selected'));
     expect(
@@ -1595,14 +1590,14 @@ void main() {
     await tester.pump();
     await gesture.up();
     await tester.pump();
-    expect(find.text('恢复 2 项'), findsOneWidget);
+    expect(find.text('保留 2 项'), findsOneWidget);
     expect(find.text('删除 2 项'), findsOneWidget);
 
     await tester.tap(firstSelector);
     await tester.pump();
-    expect(find.text('恢复 1 项'), findsOneWidget);
+    expect(find.text('保留 1 项'), findsOneWidget);
 
-    await tester.tap(find.text('恢复 1 项'));
+    await tester.tap(find.text('保留 1 项'));
     await tester.pumpAndSettle();
     expect(store.ids, ['photo']);
     expect(find.byType(SnackBar), findsNothing);
@@ -1652,8 +1647,12 @@ void main() {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      QueuePreviewScreen(FakeMediaRepository(), photo),
+                  builder: (_) => QueuePreviewScreen(
+                    FakeMediaRepository(),
+                    photo,
+                    onKeep: () async => false,
+                    onDelete: () async => false,
+                  ),
                 ),
               ),
               child: const Text('打开预览'),
@@ -1672,6 +1671,8 @@ void main() {
       expect(viewer.boundaryMargin, EdgeInsets.zero);
       expect(find.byKey(const Key('queue-preview-back')), findsOneWidget);
       expect(find.text('下滑返回待删除列表'), findsOneWidget);
+      expect(find.text('保留此项'), findsOneWidget);
+      expect(find.text('删除此项'), findsOneWidget);
 
       await tester.drag(
         find.byKey(const Key('queue-preview-surface')),
@@ -1681,6 +1682,50 @@ void main() {
       expect(find.byType(QueuePreviewScreen), findsNothing);
     },
   );
+
+  testWidgets('queue preview can keep the current item', (tester) async {
+    final store = QueueAppStore(database, ['photo']);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueueScreen(CleanerState(store, FakeMediaRepository())),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(const ValueKey('queue-item-photo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保留此项'));
+    await tester.pumpAndSettle();
+
+    expect(store.ids, isEmpty);
+    expect(find.byType(QueuePreviewScreen), findsNothing);
+  });
+
+  testWidgets('queue preview deletion keeps both confirmation steps', (
+    tester,
+  ) async {
+    final store = QueueAppStore(database, ['photo']);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueueScreen(CleanerState(store, DeletingMediaRepository())),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(const ValueKey('queue-item-photo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除此项'));
+    await tester.pumpAndSettle();
+    expect(find.text('删除 1 项？'), findsOneWidget);
+    await tester.tap(find.text('继续删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('清理完成'), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+
+    expect(store.ids, isEmpty);
+    expect(find.byType(QueuePreviewScreen), findsNothing);
+  });
 
   testWidgets('delete result reports cleaned items and estimated space', (
     tester,
