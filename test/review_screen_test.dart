@@ -95,6 +95,12 @@ class FakeAppStore extends AppStore {
   Future<void> setFavorite(String id, bool favorite) async {
     favorite ? favorites.add(id) : favorites.remove(id);
   }
+
+  @override
+  Future<List<(String, int)>> months() async => const [];
+
+  @override
+  Future<void> removeFromQueue(String id) async {}
 }
 
 class UndoAppStore extends FakeAppStore {
@@ -328,6 +334,8 @@ class QueueAppStore extends FakeAppStore {
 }
 
 class DeletingMediaRepository extends FakeMediaRepository {
+  final deletedIds = <String>[];
+
   @override
   Future<PermissionState> permission() async => PermissionState.authorized;
 
@@ -347,10 +355,24 @@ class DeletingMediaRepository extends FakeMediaRepository {
     AppStore store,
     List<String> ids,
   ) async {
+    deletedIds.addAll(ids);
     for (final id in ids) {
       await store.removeFromQueue(id);
     }
     return {for (final id in ids) id: 'confirmedRemoved'};
+  }
+}
+
+class AlbumDetailMediaRepository extends FakeMediaRepository {
+  final records = <MediaRecord>[photo, livePhoto];
+
+  @override
+  Future<List<MediaRecord>> recordsForAlbum(
+    AssetPathEntity path,
+    void Function(int, int) onProgress,
+  ) async {
+    onProgress(records.length, records.length);
+    return List.of(records);
   }
 }
 
@@ -456,6 +478,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: MediaView(media, livePhoto))),
     );
+    expect(find.byKey(const Key('live-photo-badge')), findsOneWidget);
+    expect(find.text('实况'), findsOneWidget);
     await tester.longPress(find.byKey(const Key('live-photo-hold-target')));
     await tester.pump();
 
@@ -1293,6 +1317,77 @@ void main() {
     expect(await columnsAt(840), 4);
   });
 
+  testWidgets('all media multi-select adds items to the delete queue', (
+    tester,
+  ) async {
+    final store = ScopeAppStore(database);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ScopeScreen(
+          CleanerState(store, FakeMediaRepository()),
+          Scope.all,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('media-gradient-app-bar')), findsOneWidget);
+    expect(find.byKey(const Key('media-header-gradient')), findsOneWidget);
+    expect(find.text('2 个项目'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('scope-media-photo')));
+    await tester.tap(find.byKey(const ValueKey('scope-media-next-photo')));
+    await tester.pump();
+    expect(find.text('已选择 2 项'), findsOneWidget);
+    expect(find.text('加入待删除 2 项'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('batch-queue-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('已将 2 项加入待删除队列，可在队列中复核。'), findsOneWidget);
+    expect(store.actions, [ReviewAction.delete, ReviewAction.delete]);
+  });
+
+  testWidgets('album detail shows live badge and queues selected items', (
+    tester,
+  ) async {
+    final media = AlbumDetailMediaRepository();
+    final store = UndoAppStore(database);
+    final album = SystemAlbumSummary(
+      path: AssetPathEntity(id: 'camera', name: '由我拍摄'),
+      count: 2,
+      coverId: 'photo',
+      group: SystemAlbumGroup.album,
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: SystemAlbumScreen(CleanerState(store, media), album)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('由我拍摄'), findsOneWidget);
+    expect(find.text('2 个项目'), findsOneWidget);
+    expect(find.byKey(const Key('album-start-review')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('live-photo-marker-live-photo')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('album-media-photo')));
+    await tester.tap(find.byKey(const ValueKey('album-media-live-photo')));
+    await tester.pump();
+    expect(find.text('已选择 2 项'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('batch-queue-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已将 2 项加入待删除队列，可在队列中复核。'), findsOneWidget);
+    expect(store.actions, [ReviewAction.delete, ReviewAction.delete]);
+    expect(find.text('0 个项目'), findsOneWidget);
+  });
+
   testWidgets('similar photo groups open the existing review screen', (
     tester,
   ) async {
@@ -1352,6 +1447,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
+    expect(tester.widget<Scaffold>(find.byType(Scaffold)).extendBody, isTrue);
     expect(find.byKey(const Key('home-glass-nav')), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
     expect(find.text('更多'), findsNothing);

@@ -115,6 +115,250 @@ class _FloatingGlassAppBar extends StatelessWidget
   );
 }
 
+class _MediaGradientAppBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  const _MediaGradientAppBar({
+    required this.media,
+    required this.title,
+    required this.subtitle,
+    this.coverId,
+    this.actions,
+  });
+
+  final MediaRepository media;
+  final String title;
+  final String subtitle;
+  final String? coverId;
+  final List<Widget>? actions;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(88);
+
+  @override
+  Widget build(BuildContext context) => AppBar(
+    key: const Key('media-gradient-app-bar'),
+    primary: true,
+    toolbarHeight: 88,
+    automaticallyImplyLeading: false,
+    backgroundColor: const Color(0xFF2B3037),
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    scrolledUnderElevation: 0,
+    systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
+      systemStatusBarContrastEnforced: false,
+    ),
+    leadingWidth: 68,
+    leading: Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Center(
+        child: Material(
+          color: const Color(0x52000000),
+          shape: const CircleBorder(side: BorderSide(color: Color(0x66FFFFFF))),
+          child: IconButton(
+            key: const Key('media-header-back'),
+            tooltip: '返回',
+            onPressed: () => Navigator.maybePop(context),
+            color: Colors.white,
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          ),
+        ),
+      ),
+    ),
+    titleSpacing: 6,
+    title: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            height: 1.08,
+            shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+          ),
+        ),
+      ],
+    ),
+    actions: actions,
+    flexibleSpace: Stack(
+      fit: StackFit.expand,
+      children: [
+        if (coverId != null)
+          MediaThumb(
+            media,
+            coverId!,
+            width: 1080,
+            height: 360,
+            showPlaceholderIcon: false,
+            placeholderColor: const Color(0xFF2B3037),
+          ),
+        const DecoratedBox(
+          key: Key('media-header-gradient'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xE6000000), Color(0xAD11151A), Color(0xF22B3037)],
+              stops: [0, 0.56, 1],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _HeaderSelectButton extends StatelessWidget {
+  const _HeaderSelectButton({required this.selecting, required this.onPressed});
+
+  final bool selecting;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Center(
+      child: TextButton(
+        key: const Key('media-select-button'),
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white54,
+          backgroundColor: const Color(0x52000000),
+          side: const BorderSide(color: Color(0x66FFFFFF)),
+          minimumSize: const Size(62, 44),
+          shape: const StadiumBorder(),
+        ),
+        child: Text(selecting ? '取消' : '选择'),
+      ),
+    ),
+  );
+}
+
+class _LivePhotoBadge extends StatelessWidget {
+  const _LivePhotoBadge({this.showLabel = false});
+
+  final bool showLabel;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: EdgeInsets.symmetric(horizontal: showLabel ? 8 : 5, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xB3000000),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: const Color(0x66FFFFFF)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.motion_photos_on_rounded,
+          color: Colors.white,
+          size: 15,
+        ),
+        if (showLabel) ...[
+          const SizedBox(width: 4),
+          const Text(
+            '实况',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              height: 1,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _SelectionMarker extends StatelessWidget {
+  const _SelectionMarker({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 28,
+    height: 28,
+    decoration: BoxDecoration(
+      color: selected ? const Color(0xFF1557F8) : const Color(0x66000000),
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 2),
+    ),
+    child: selected
+        ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+        : null,
+  );
+}
+
+class _BatchQueueBar extends StatelessWidget {
+  const _BatchQueueBar({
+    required this.selectedCount,
+    required this.busy,
+    required this.onQueue,
+  });
+
+  final int selectedCount;
+  final bool busy;
+  final VoidCallback onQueue;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    minimum: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+    child: Align(
+      alignment: Alignment.bottomCenter,
+      child: ClipRRect(
+        key: const Key('batch-queue-bar'),
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Container(
+            height: 58,
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: const Color(0x66000000),
+              border: Border.all(color: const Color(0x66FFFFFF)),
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: const Key('batch-queue-button'),
+                onPressed: busy || selectedCount == 0 ? null : onQueue,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1557F8),
+                  disabledBackgroundColor: const Color(0x668A8F99),
+                ),
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: Text(busy ? '正在加入…' : '加入待删除 $selectedCount 项'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await AppStore.open();
@@ -1276,7 +1520,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _home() => ListView(
-    padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
     children: [
       if (app.scanFailed)
         Card(
@@ -1393,7 +1637,7 @@ class _HomeScreenState extends State<HomeScreen> {
           .where((album) => album.group == SystemAlbumGroup.smart)
           .toList();
       return ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
         children: [
           SizedBox(
             height: 150,
@@ -1560,7 +1804,7 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _more() => ListView(
-    padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
     children: [
       _storageOverview(),
       _sectionTitle('待处理'),
@@ -1639,7 +1883,9 @@ class _HomeScreenState extends State<HomeScreen> {
       systemStatusBarContrastEnforced: false,
     ),
     child: Scaffold(
+      extendBody: true,
       body: SafeArea(
+        bottom: false,
         child: app.scanning && app.months.isEmpty
             ? Center(
                 child: Column(
@@ -1656,7 +1902,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
           child: ClipRRect(
             key: const Key('home-glass-nav'),
             borderRadius: BorderRadius.circular(28),
@@ -1736,13 +1982,26 @@ class SystemAlbumScreen extends StatefulWidget {
 
 class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
   List<MediaRecord>? records;
+  final selected = <String, MediaRecord>{};
   int loaded = 0;
   int total = 0;
+  String? coverId;
+  bool selecting = false;
+  bool queueing = false;
+
+  String get title =>
+      widget.title ??
+      (widget.album.path.name.trim().isEmpty
+          ? '未命名相册'
+          : widget.album.path.name);
+
+  Scope get scope => Scope('album:${widget.album.path.id}', title);
 
   @override
   void initState() {
     super.initState();
     total = widget.album.count;
+    coverId = widget.album.coverId;
     _load();
   }
 
@@ -1758,7 +2017,22 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
         });
       }
     });
-    if (mounted) setState(() => records = result);
+    final queuedIds = (await widget.app.store.queue())
+        .map((row) => row['media_id'] as String)
+        .toSet();
+    final visible = result
+        .where((record) => !queuedIds.contains(record.id))
+        .toList();
+    if (mounted) {
+      setState(() {
+        records = visible;
+        total = visible.length;
+        coverId = visible.isEmpty ? null : visible.first.id;
+        selected.removeWhere(
+          (id, _) => !visible.any((record) => record.id == id),
+        );
+      });
+    }
   }
 
   Future<void> _review([int? initialIndex]) async {
@@ -1769,13 +2043,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
       MaterialPageRoute(
         builder: (_) => ReviewScreen(
           widget.app,
-          Scope(
-            'album:${widget.album.path.id}',
-            widget.title ??
-                (widget.album.path.name.trim().isEmpty
-                    ? '未命名相册'
-                    : widget.album.path.name),
-          ),
+          scope,
           initialIndex: initialIndex,
           source: items,
           includeReviewedSource: initialIndex != null,
@@ -1785,18 +2053,84 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
     if (mounted) setState(() {});
   }
 
+  void _toggleSelecting() => setState(() {
+    selecting = !selecting;
+    selected.clear();
+  });
+
+  void _toggleSelected(MediaRecord item) => setState(() {
+    selected.containsKey(item.id)
+        ? selected.remove(item.id)
+        : selected[item.id] = item;
+  });
+
+  Future<void> _queueSelected() async {
+    if (queueing || selected.isEmpty) return;
+    setState(() => queueing = true);
+    final items = selected.values.toList();
+    try {
+      for (final item in items) {
+        await widget.app.store.act(scope, item, ReviewAction.delete);
+      }
+      if (!mounted) return;
+      setState(() {
+        records = records
+            ?.where((item) => !selected.containsKey(item.id))
+            .toList();
+        total = records?.length ?? 0;
+        coverId = records?.isEmpty == false ? records!.first.id : null;
+        selected.clear();
+        selecting = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已将 ${items.length} 项加入待删除队列，可在队列中复核。')),
+      );
+    } finally {
+      if (mounted) setState(() => queueing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: _FloatingGlassAppBar(
-      title: Text(
-        widget.title ??
-            (widget.album.path.name.trim().isEmpty
-                ? '未命名相册'
-                : widget.album.path.name),
-      ),
+    extendBody: true,
+    appBar: _MediaGradientAppBar(
+      media: widget.app.media,
+      title: title,
+      subtitle: selecting
+          ? '已选择 ${selected.length} 项'
+          : '${records?.length ?? total} 个项目',
+      coverId: coverId,
+      actions: [
+        if (!selecting)
+          Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: Center(
+              child: IconButton(
+                key: const Key('album-start-review'),
+                tooltip: '开始整理',
+                onPressed: records?.isNotEmpty == true && !queueing
+                    ? _review
+                    : null,
+                style: IconButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  disabledForegroundColor: Colors.white54,
+                  backgroundColor: const Color(0x52000000),
+                  side: const BorderSide(color: Color(0x66FFFFFF)),
+                ),
+                icon: const Icon(Icons.swipe_rounded),
+              ),
+            ),
+          ),
+        _HeaderSelectButton(
+          selecting: selecting,
+          onPressed: records == null || queueing ? null : _toggleSelecting,
+        ),
+      ],
     ),
-    body: records == null
-        ? Center(
+    body: Stack(
+      children: [
+        if (records == null)
+          Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1806,64 +2140,82 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
               ],
             ),
           )
-        : Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-                child: Row(
-                  children: [
-                    Text(
-                      '${records!.length} 项媒体',
-                      style: const TextStyle(color: Color(0xFF818895)),
-                    ),
-                    const Spacer(),
-                    FilledButton(
-                      onPressed: records!.isEmpty ? null : _review,
-                      child: const Text('开始整理'),
-                    ),
-                  ],
-                ),
+        else if (records!.isEmpty)
+          const Center(child: Text('这个相册没有可访问的媒体'))
+        else
+          GridView.builder(
+            key: const Key('album-media-grid'),
+            padding: EdgeInsets.fromLTRB(4, 6, 4, selecting ? 82 : 16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: _photoGridColumnCount(
+                MediaQuery.sizeOf(context).width,
               ),
-              Expanded(
-                child: records!.isEmpty
-                    ? const Center(child: Text('这个相册没有可访问的媒体'))
-                    : GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: _photoGridColumnCount(
-                            MediaQuery.sizeOf(context).width,
-                          ),
-                          crossAxisSpacing: 6,
-                          mainAxisSpacing: 6,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4,
+            ),
+            itemCount: records!.length,
+            itemBuilder: (context, index) {
+              final item = records![index];
+              final isSelected = selected.containsKey(item.id);
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  key: ValueKey('album-media-${item.id}'),
+                  onTap: selecting
+                      ? () => _toggleSelected(item)
+                      : () => _review(index),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      MediaThumb(widget.app.media, item.id),
+                      if (item.live)
+                        Positioned(
+                          key: ValueKey('live-photo-marker-${item.id}'),
+                          left: 6,
+                          top: 6,
+                          child: const _LivePhotoBadge(),
                         ),
-                        itemCount: records!.length,
-                        itemBuilder: (context, index) => ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
-                          child: InkWell(
-                            onTap: () => _review(index),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                MediaThumb(
-                                  widget.app.media,
-                                  records![index].id,
-                                ),
-                                if (records![index].type == 2)
-                                  Positioned(
-                                    right: 7,
-                                    bottom: 7,
-                                    child: _VideoDurationBadge(
-                                      records![index].duration,
-                                    ),
+                      if (item.type == 2)
+                        Positioned(
+                          right: 7,
+                          bottom: 7,
+                          child: _VideoDurationBadge(item.duration),
+                        ),
+                      if (selecting) ...[
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: _SelectionMarker(selected: isSelected),
+                        ),
+                        if (isSelected)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0xFF1557F8),
+                                    width: 3,
                                   ),
-                              ],
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-              ),
-            ],
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
+        if (selecting)
+          _BatchQueueBar(
+            selectedCount: selected.length,
+            busy: queueing,
+            onQueue: _queueSelected,
+          ),
+      ],
+    ),
   );
 }
 
@@ -2054,14 +2406,18 @@ enum _LibraryTimeMode { year, month, all }
 
 class _ScopeScreenState extends State<ScopeScreen> {
   final ScrollController gridController = ScrollController();
+  final selected = <String, MediaRecord>{};
   bool pendingOnly = false;
   bool reviewStarted = false;
   bool libraryMenuExpanded = true;
   bool showingAlbums = false;
+  bool selecting = false;
+  bool queueing = false;
   _LibraryTimeMode libraryTimeMode = _LibraryTimeMode.all;
   int count = 0;
   int pendingCount = 0;
   int? focusedIndex;
+  String? coverId;
 
   @override
   void initState() {
@@ -2086,6 +2442,9 @@ class _ScopeScreenState extends State<ScopeScreen> {
     final pending = widget.app.downAction == DownSwipeAction.pending
         ? await widget.app.store.count(widget.scope, pendingOnly: true)
         : 0;
+    final cover = total == 0
+        ? null
+        : await widget.app.store.at(widget.scope, 0, pendingOnly: pendingOnly);
     final focus = focusId == null
         ? null
         : await widget.app.store.positionOf(
@@ -2097,6 +2456,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
     setState(() {
       count = total;
       pendingCount = pending;
+      coverId = cover?.id;
       focusedIndex = focus != null && focus >= 0 ? focus : null;
     });
     if (focusedIndex != null) {
@@ -2141,6 +2501,42 @@ class _ScopeScreenState extends State<ScopeScreen> {
       ),
     );
     await _refresh(focusId: focusId);
+  }
+
+  void _toggleSelecting() => setState(() {
+    selecting = !selecting;
+    selected.clear();
+  });
+
+  void _toggleSelected(MediaRecord item) => setState(() {
+    selected.containsKey(item.id)
+        ? selected.remove(item.id)
+        : selected[item.id] = item;
+  });
+
+  void _leaveSelection() {
+    selecting = false;
+    selected.clear();
+  }
+
+  Future<void> _queueSelected() async {
+    if (queueing || selected.isEmpty) return;
+    setState(() => queueing = true);
+    final items = selected.values.toList();
+    try {
+      for (final item in items) {
+        await widget.app.store.act(widget.scope, item, ReviewAction.delete);
+      }
+      if (!mounted) return;
+      setState(_leaveSelection);
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已将 ${items.length} 项加入待删除队列，可在队列中复核。')),
+      );
+    } finally {
+      if (mounted) setState(() => queueing = false);
+    }
   }
 
   bool _handleScroll(ScrollNotification notification) {
@@ -2230,17 +2626,21 @@ class _ScopeScreenState extends State<ScopeScreen> {
             key: const Key('scope-media-grid'),
             controller: gridController,
             padding: EdgeInsets.fromLTRB(
-              20,
-              0,
-              20,
-              widget.scope.key == Scope.all.key && !pendingOnly ? 116 : 24,
+              4,
+              6,
+              4,
+              selecting
+                  ? 82
+                  : widget.scope.key == Scope.all.key && !pendingOnly
+                  ? 116
+                  : 16,
             ),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: _photoGridColumnCount(
                 MediaQuery.sizeOf(context).width,
               ),
-              crossAxisSpacing: 6,
-              mainAxisSpacing: 6,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4,
             ),
             itemCount: count,
             itemBuilder: (context, index) => FutureBuilder<MediaRecord?>(
@@ -2254,14 +2654,25 @@ class _ScopeScreenState extends State<ScopeScreen> {
                 if (item == null) {
                   return const ColoredBox(color: Color(0xFFE7ECEB));
                 }
+                final isSelected = selected.containsKey(item.id);
                 return ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(10),
                   child: InkWell(
-                    onTap: () => _open(index),
+                    key: ValueKey('scope-media-${item.id}'),
+                    onTap: selecting
+                        ? () => _toggleSelected(item)
+                        : () => _open(index),
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
                         MediaThumb(widget.app.media, item.id),
+                        if (item.live)
+                          Positioned(
+                            key: ValueKey('live-photo-marker-${item.id}'),
+                            left: 6,
+                            top: 6,
+                            child: const _LivePhotoBadge(),
+                          ),
                         if (item.type == 2) ...[
                           Positioned(
                             right: 7,
@@ -2269,13 +2680,34 @@ class _ScopeScreenState extends State<ScopeScreen> {
                             child: _VideoDurationBadge(item.duration),
                           ),
                         ],
+                        if (selecting) ...[
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: _SelectionMarker(selected: isSelected),
+                          ),
+                          if (isSelected)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFF1557F8),
+                                      width: 3,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                         if (focusedIndex == index)
                           Positioned.fill(
                             child: IgnorePointer(
                               child: DecoratedBox(
                                 key: Key('focused-scope-item-$index'),
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
                                     color: const Color(0xFFE9A23B),
                                     width: 3,
@@ -2300,7 +2732,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
   }
 
   Widget _libraryControls() => SafeArea(
-    minimum: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+    minimum: const EdgeInsets.fromLTRB(16, 0, 16, 4),
     child: Align(
       alignment: Alignment.bottomCenter,
       child: AnimatedSwitcher(
@@ -2397,50 +2829,62 @@ class _ScopeScreenState extends State<ScopeScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: _FloatingGlassAppBar(title: Text(widget.scope.label)),
+    extendBody: true,
+    appBar: _MediaGradientAppBar(
+      media: widget.app.media,
+      title: widget.scope.label,
+      subtitle: selecting ? '已选择 ${selected.length} 项' : '$count 个项目',
+      coverId: coverId,
+      actions: [
+        if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
+          _HeaderSelectButton(
+            selecting: selecting,
+            onPressed: count == 0 || queueing ? null : _toggleSelecting,
+          ),
+      ],
+    ),
     body: Stack(
       children: [
         Column(
           children: [
-            if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
+            if (!selecting &&
+                !showingAlbums &&
+                libraryTimeMode == _LibraryTimeMode.all &&
+                widget.app.downAction == DownSwipeAction.pending)
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-                child: Row(
-                  children: [
-                    Text(
-                      '$count 项媒体',
-                      style: const TextStyle(color: Color(0xFF818895)),
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    key: const Key('pending-filter-entry'),
+                    onPressed: () {
+                      setState(() {
+                        pendingOnly = !pendingOnly;
+                        _leaveSelection();
+                      });
+                      _refresh();
+                    },
+                    icon: Icon(
+                      pendingOnly
+                          ? Icons.photo_library_outlined
+                          : Icons.schedule_outlined,
+                      size: 18,
                     ),
-                    const Spacer(),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: widget.app.downAction == DownSwipeAction.pending
-                          ? TextButton.icon(
-                              key: const Key('pending-filter-entry'),
-                              onPressed: () {
-                                setState(() => pendingOnly = !pendingOnly);
-                                _refresh();
-                              },
-                              icon: Icon(
-                                pendingOnly
-                                    ? Icons.photo_library_outlined
-                                    : Icons.schedule_outlined,
-                                size: 18,
-                              ),
-                              label: Text(
-                                pendingOnly ? '返回全部' : '待定 $pendingCount',
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
+                    label: Text(pendingOnly ? '返回全部' : '待定 $pendingCount'),
+                  ),
                 ),
               ),
             Expanded(child: _content()),
           ],
         ),
-        if (widget.scope.key == Scope.all.key && !pendingOnly)
+        if (widget.scope.key == Scope.all.key && !pendingOnly && !selecting)
           _libraryControls(),
+        if (selecting)
+          _BatchQueueBar(
+            selectedCount: selected.length,
+            busy: queueing,
+            onQueue: _queueSelected,
+          ),
       ],
     ),
   );
@@ -4064,6 +4508,13 @@ class _MediaViewState extends State<MediaView> {
                     alignment: Alignment.center,
                     children: [
                       media,
+                      if (widget.item.live)
+                        const Positioned(
+                          key: Key('live-photo-badge'),
+                          left: 12,
+                          top: 12,
+                          child: _LivePhotoBadge(showLabel: true),
+                        ),
                       if (widget.item.type == 2)
                         Positioned.fill(
                           child: Center(

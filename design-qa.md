@@ -253,3 +253,39 @@ final result: passed with iOS Live Photo device check pending
 - APK 包内信息：`versionName=0.1.30`，`versionCode=31`；应用标签为“相册删除”。
 
 final result: passed with iOS device check pending
+
+---
+
+# v0.1.31 图库沉浸顶栏、实况标记与批量选择验收
+
+## 对照对象
+
+- source visual truth：用户提供的系统相册截图 `3b84a43b6b7e153038c8d35992478a89.jpg`，`1280 x 2781`；重点对照暗色照片顶栏、返回/标题/数量/选择、贴边媒体网格和底部半透明图库导航。
+- implementation：`ui-preview/release-v0.1.31-album-detail.png` 与 `ui-preview/release-v0.1.31-final-selected.png`，华为 MED-AL00、Android 10、真实相册数据，`720 x 1600`。
+- normalization：两台设备宽高比和系统字体不同，按逻辑宽度对照层级、相对间距与交互状态，不做跨平台逐像素复刻；来源为 iOS 五列网格，当前 360dp Android 真机按既有响应式规则显示四列。
+
+## Findings
+
+- 无 P0/P1/P2 遗留问题。
+- 顶栏：返回按钮位于最左，其后为相册名与动态项目数，右侧为“选择/取消”；真实封面叠加自上而下的深色不透明渐变，复杂照片上文字和控件均清晰。
+- 网格：详情页媒体贴近左右边缘，卡片间仅保留细间距；不再出现独立白色标题区或白色底部操作区。
+- 批量选择：进入选择态后每项显示圆形选择标记，已选项使用蓝色描边和勾选；底部显示蓝色“加入待删除 N 项”，只写入待删除队列，不直接调用系统删除。
+- 底部导航：首页导航和图库内控制继续使用半透明毛玻璃并下沉到安全区底部，内容可延伸到其后方，符合来源图的覆盖关系。
+- 实况标记：真实 Live Photo 在网格和全屏浏览页显示运动照片标记；Android 公开媒体库无法可靠识别 Live Photo，因此本次 Android 真机没有伪造标记，逻辑由组件测试覆盖，仍需 iOS 真机最终核对。
+- 字体、文案、颜色与图片：沿用系统中文字体和现有蓝色主色；封面及网格全部读取真机媒体，没有替换素材、拉伸或占位图。
+
+## Comparison history
+
+1. Pass 1：批量入口使用红色，容易被理解为立即删除，记为 P2。
+2. 修正：将“加入待删除 N 项”改为主色蓝，并确认真正删除只保留在待删除队列的复核流程。
+3. Pass 2：最终 release 覆盖安装后重新进入全部照片，选择两项并截图；标题、计数、选择标记和蓝色队列入口完整。随后取消选择，未写入队列、未删除任何真机媒体。
+
+## Verification
+
+- `flutter analyze`：通过，无问题。
+- `flutter test`：52/52 通过；覆盖实况标记、全部照片批量入队、系统相册批量入队和透明底部导航。
+- Android release：构建与 APK v2 签名校验通过；真机覆盖安装成功。
+- 真机版本：`versionName=0.1.31`，`versionCode=32`，应用标签“相册删除”，ABI 为 `armeabi-v7a` / `arm64-v8a`。
+- 真机交互：进入全部照片及 Screenshots 相册、切换选择态、选择两项、取消选择均通过；验收没有执行“加入待删除”或真实删除。
+
+final result: passed with iOS Live Photo device check pending
