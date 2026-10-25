@@ -42,6 +42,19 @@ class AlbumsMediaRepository extends FakeMediaRepository {
   ];
 }
 
+class SimilarMediaRepository extends FakeMediaRepository {
+  @override
+  Future<List<SimilarPhotoGroup>> findSimilarPhotos(
+    AppStore store,
+    void Function(int, int) onProgress,
+  ) async {
+    onProgress(2, 2);
+    return const [
+      SimilarPhotoGroup([photo, nextPhoto]),
+    ];
+  }
+}
+
 class FakeAppStore extends AppStore {
   FakeAppStore(super.db, {this.queueCount = 0});
 
@@ -57,6 +70,9 @@ class FakeAppStore extends AppStore {
 
   @override
   Future<void> saveAnchor(Scope scope, MediaRecord media) async {}
+
+  @override
+  Future<Set<String>> reviewedIds(Scope scope) async => const {};
 
   @override
   Future<bool> isFavorite(String id) async => favorites.contains(id);
@@ -118,21 +134,33 @@ class ScopeAppStore extends UndoAppStore {
   Future<ReviewProgress?> reviewProgress(Scope scope) async => null;
 
   @override
-  Future<int> count(Scope scope, {bool pendingOnly = false}) async =>
-      items.length;
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => items.length;
 
   @override
   Future<MediaRecord?> at(
     Scope scope,
     int index, {
     bool pendingOnly = false,
+    bool unreviewedOnly = false,
   }) async => index >= 0 && index < items.length ? items[index] : null;
+
+  @override
+  Future<List<MediaRecord>> list(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => items;
 
   @override
   Future<int> positionOf(
     Scope scope,
     String mediaId, {
     bool pendingOnly = false,
+    bool unreviewedOnly = false,
   }) async => items.indexWhere((item) => item.id == mediaId);
 }
 
@@ -166,22 +194,104 @@ class LongScopeAppStore extends ScopeAppStore {
   Future<String?> anchor(Scope scope) async => initialAnchor;
 
   @override
-  Future<int> count(Scope scope, {bool pendingOnly = false}) async =>
-      items.length;
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => items.length;
 
   @override
   Future<MediaRecord?> at(
     Scope scope,
     int index, {
     bool pendingOnly = false,
+    bool unreviewedOnly = false,
   }) async => index >= 0 && index < items.length ? items[index] : null;
+
+  @override
+  Future<List<MediaRecord>> list(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => items;
 
   @override
   Future<int> positionOf(
     Scope scope,
     String mediaId, {
     bool pendingOnly = false,
+    bool unreviewedOnly = false,
   }) async => items.indexWhere((item) => item.id == mediaId);
+}
+
+class VideoScopeAppStore extends ScopeAppStore {
+  VideoScopeAppStore(super.db);
+
+  @override
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => 1;
+
+  @override
+  Future<MediaRecord?> at(
+    Scope scope,
+    int index, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => index == 0 ? video : null;
+
+  @override
+  Future<List<MediaRecord>> list(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => const [video];
+}
+
+class ReviewedVideoScopeAppStore extends ScopeAppStore {
+  ReviewedVideoScopeAppStore(super.db);
+
+  static const allItems = [photo, video, nextPhoto];
+  static const unreviewedItems = [photo, nextPhoto];
+
+  @override
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => unreviewedOnly ? unreviewedItems.length : allItems.length;
+
+  @override
+  Future<MediaRecord?> at(
+    Scope scope,
+    int index, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async {
+    final items = unreviewedOnly ? unreviewedItems : allItems;
+    return index >= 0 && index < items.length ? items[index] : null;
+  }
+
+  @override
+  Future<List<MediaRecord>> list(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => unreviewedOnly ? unreviewedItems : allItems;
+
+  @override
+  Future<int> positionOf(
+    Scope scope,
+    String mediaId, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async {
+    if (unreviewedOnly && mediaId == video.id) return 1;
+    final items = unreviewedOnly ? unreviewedItems : allItems;
+    return items.indexWhere((item) => item.id == mediaId);
+  }
 }
 
 class QueueAppStore extends FakeAppStore {
@@ -197,6 +307,36 @@ class QueueAppStore extends FakeAppStore {
   @override
   Future<void> removeFromQueue(String id) async {
     ids.remove(id);
+  }
+
+  @override
+  Future<List<(String, int)>> months() async => const [];
+}
+
+class DeletingMediaRepository extends FakeMediaRepository {
+  @override
+  Future<PermissionState> permission() async => PermissionState.authorized;
+
+  @override
+  Future<void> scan(AppStore store, void Function(int) onProgress) async {}
+
+  @override
+  Future<bool> usesRecoverableTrash() async => false;
+
+  @override
+  Future<Map<String, int>> mediaSizes(Iterable<String> ids) async => {
+    for (final id in ids) id: 2 * 1024 * 1024,
+  };
+
+  @override
+  Future<Map<String, String>> deleteReviewedMedia(
+    AppStore store,
+    List<String> ids,
+  ) async {
+    for (final id in ids) {
+      await store.removeFromQueue(id);
+    }
+    return {for (final id in ids) id: 'confirmedRemoved'};
   }
 }
 
@@ -283,6 +423,39 @@ void main() {
     expect(media.videoFileRequests, 0);
   });
 
+  testWidgets('review shows only a shadowed media surface above controls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.videos,
+          source: const [video],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('media-edge-blur')), findsNothing);
+    final surface = tester.widget<DecoratedBox>(
+      find.byKey(const Key('media-surface-shadow')),
+    );
+    final shadows = (surface.decoration as BoxDecoration).boxShadow!;
+    expect(shadows, isNotEmpty);
+    expect(shadows.single.color, const Color(0x3D000000));
+    final progressPosition = tester
+        .widgetList<Positioned>(
+          find.ancestor(
+            of: find.byType(LinearProgressIndicator),
+            matching: find.byType(Positioned),
+          ),
+        )
+        .firstWhere((positioned) => positioned.left == 18);
+    expect(progressPosition.bottom, 18);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('the review queue count stays fully inside the viewport', (
     tester,
   ) async {
@@ -312,7 +485,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('the next item grows and fades in from the center', (
+  testWidgets('the next item follows the gesture in from the screen edge', (
     tester,
   ) async {
     final store = FakeAppStore(database);
@@ -333,14 +506,25 @@ void main() {
     await gesture.moveBy(const Offset(-100, 0));
     await tester.pump();
 
-    final opacity = tester.widget<Opacity>(
-      find.byKey(const Key('incoming-media-opacity')),
+    final translation = tester.widget<Transform>(
+      find.byKey(const Key('incoming-media-translation')),
     );
-    final scale = tester.widget<Transform>(
-      find.byKey(const Key('incoming-media-scale')),
+    expect(translation.transform.storage[12], greaterThan(0));
+    expect(
+      translation.transform.storage[12],
+      lessThan(tester.view.physicalSize.width / tester.view.devicePixelRatio),
     );
-    expect(opacity.opacity, inExclusiveRange(0, 1));
-    expect(scale.transform.storage[0], inExclusiveRange(0.86, 1));
+    final currentTransforms = tester.widgetList<Transform>(
+      find.ancestor(of: currentMedia, matching: find.byType(Transform)),
+    );
+    expect(
+      currentTransforms.every(
+        (transform) =>
+            transform.transform.storage[1].abs() < 0.000001 &&
+            transform.transform.storage[4].abs() < 0.000001,
+      ),
+      isTrue,
+    );
 
     await gesture.up();
     await tester.pump();
@@ -351,7 +535,104 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('an upward swipe highlights the delete control', (tester) async {
+  testWidgets('a short fast horizontal flick advances to the next item', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.all,
+          source: const [photo, nextPhoto],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.fling(
+      find.byKey(const Key('review-gesture')),
+      const Offset(-48, 0),
+      1400,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
+  });
+
+  testWidgets('edge swipes show one centered notice without queuing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.all,
+          source: const [photo],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('review-gesture'))),
+      );
+      await gesture.moveBy(const Offset(100, 0));
+      await tester.pump();
+      expect(
+        tester
+            .widget<Transform>(find.byKey(const Key('media-drag-translation')))
+            .transform
+            .storage[12],
+        greaterThan(0),
+      );
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      expect(find.text('已经是第一张'), findsOneWidget);
+    }
+
+    final notice = find.byKey(const Key('edge-notice'));
+    expect(notice, findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    final noticeDecoration =
+        tester.widget<DecoratedBox>(notice).decoration as BoxDecoration;
+    expect(noticeDecoration.color, const Color(0x70FFFFFF));
+    expect(noticeDecoration.border, isNotNull);
+    expect(
+      tester.widget<Text>(find.text('已经是第一张')).style?.color,
+      const Color(0xFF10131A),
+    );
+    expect(
+      find.ancestor(of: notice, matching: find.byType(BackdropFilter)),
+      findsOneWidget,
+    );
+    expect(
+      tester.getCenter(notice).dy,
+      closeTo(
+        tester.view.physicalSize.height / tester.view.devicePixelRatio / 2,
+        2,
+      ),
+    );
+
+    final lastGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('review-gesture'))),
+    );
+    await lastGesture.moveBy(const Offset(-100, 0));
+    await tester.pump();
+    await lastGesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 260));
+    await tester.pump();
+    expect(find.byKey(const Key('edge-notice')), findsOneWidget);
+    expect(find.text('已经是第一张'), findsNothing);
+    expect(find.text('已经是最后一张'), findsOneWidget);
+  });
+
+  testWidgets('an upward swipe keeps the previous scale-only delete feedback', (
+    tester,
+  ) async {
     final store = FakeAppStore(database, queueCount: 7);
 
     await tester.pumpWidget(
@@ -375,6 +656,7 @@ void main() {
       find.byKey(const Key('delete-control-scale')),
     );
     expect(control.transform.storage[0], greaterThan(1));
+    expect(find.byKey(const Key('delete-perspective')), findsNothing);
     expect(find.text('已加入待删除'), findsNothing);
 
     await gesture.up();
@@ -463,6 +745,35 @@ void main() {
 
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('an acted item leaves a source-backed review list', (
+    tester,
+  ) async {
+    final store = UndoAppStore(database);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(store, FakeMediaRepository()),
+          Scope.all,
+          source: const [photo, nextPhoto],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('photo'))),
+    );
+    await gesture.moveBy(const Offset(0, -100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('photo')), findsNothing);
+    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
+    expect(find.text('1 / 1'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -611,7 +922,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.actions, [ReviewAction.delete]);
-    expect(find.text('3 / 3'), findsOneWidget);
+    expect(find.text('2 / 2'), findsOneWidget);
     expect(find.byKey(const ValueKey('third-photo')), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -682,6 +993,24 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('settings no longer offers a downward skip action', (
+    tester,
+  ) async {
+    final app = CleanerState(FakeAppStore(database), FakeMediaRepository());
+
+    await tester.pumpWidget(MaterialApp(home: SettingsScreen(app)));
+
+    final selector = tester.widget<SegmentedButton<DownSwipeAction>>(
+      find.byType(SegmentedButton<DownSwipeAction>),
+    );
+    expect(selector.segments.map((segment) => segment.value), [
+      DownSwipeAction.none,
+      DownSwipeAction.pending,
+      DownSwipeAction.returnToAlbum,
+    ]);
+    expect(find.text('跳过'), findsNothing);
+  });
+
   testWidgets('continue review returns down to the all-media grid', (
     tester,
   ) async {
@@ -730,7 +1059,7 @@ void main() {
     expect(find.byKey(const Key('focused-scope-item-80')), findsOneWidget);
   });
 
-  testWidgets('acting on the last item keeps backward browsing available', (
+  testWidgets('acting on the last item selects the previous remaining item', (
     tester,
   ) async {
     final store = UndoAppStore(database);
@@ -754,24 +1083,10 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
-    expect(find.text('本范围已整理完成'), findsNothing);
-
-    gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('next-photo'))),
-    );
-    await gesture.moveBy(const Offset(-100, 0));
-    await gesture.up();
-    await tester.pumpAndSettle();
-    expect(find.text('已经是最后一张，可以向右滑动返回上一张'), findsOneWidget);
-
-    gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('next-photo'))),
-    );
-    await gesture.moveBy(const Offset(100, 0));
-    await gesture.up();
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('next-photo')), findsNothing);
     expect(find.byKey(const ValueKey('photo')), findsOneWidget);
+    expect(find.text('1 / 1'), findsOneWidget);
+    expect(find.text('本范围已整理完成'), findsNothing);
   });
 
   testWidgets('home categories include all media and albums use a grid', (
@@ -781,7 +1096,27 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
-    expect(find.text('全部照片与视频'), findsOneWidget);
+    expect(find.byKey(const Key('category-grid')), findsOneWidget);
+    expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('category-category:video')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('category-category:screenshot')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('category-similar')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('category-all'))).height,
+      lessThanOrEqualTo(72),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('category-all'))).dy,
+      tester
+          .getTopLeft(find.byKey(const ValueKey('category-category:video')))
+          .dy,
+    );
 
     await tester.tap(find.text('相册'));
     await tester.pumpAndSettle();
@@ -791,29 +1126,277 @@ void main() {
     expect(find.text('Download'), findsOneWidget);
   });
 
-  testWidgets('year-month cards show month and count without repeating year', (
+  testWidgets('photo grids adapt from three to eight columns', (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    Future<int> columnsAt(double logicalWidth) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(logicalWidth, 900);
+      final app = CleanerState(ScopeAppStore(database), FakeMediaRepository());
+      await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+      await tester.pumpAndSettle();
+      final grid = tester.widget<GridView>(
+        find.byKey(const Key('scope-media-grid')),
+      );
+      return (grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+          .crossAxisCount;
+    }
+
+    expect(await columnsAt(320), 3);
+    expect(await columnsAt(390), 4);
+    expect(await columnsAt(600), 6);
+    expect(await columnsAt(800), 8);
+  });
+
+  testWidgets('album grids keep two columns on phones and scale to four', (
     tester,
   ) async {
-    final app = CleanerState(ScopeAppStore(database), FakeMediaRepository());
-    app.months = [('2026-10', 3), ('2026-09', 2)];
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    Future<int> columnsAt(double logicalWidth) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(logicalWidth, 900);
+      final app = CleanerState(
+        ScopeAppStore(database),
+        AlbumsMediaRepository(),
+      );
+      await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('相册'));
+      await tester.pumpAndSettle();
+      final grid = tester.widget<GridView>(
+        find.byKey(const Key('system-album-grid')),
+      );
+      return (grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+          .crossAxisCount;
+    }
+
+    expect(await columnsAt(390), 2);
+    expect(await columnsAt(600), 3);
+    expect(await columnsAt(840), 4);
+  });
+
+  testWidgets('similar photo groups open the existing review screen', (
+    tester,
+  ) async {
+    final app = CleanerState(ScopeAppStore(database), SimilarMediaRepository());
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('相册'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('年月'));
+    await tester.tap(find.byKey(const ValueKey('category-similar')));
     await tester.pumpAndSettle();
 
-    expect(find.text('2026'), findsOneWidget);
-    expect(find.text('10月'), findsOneWidget);
-    expect(find.text('3 项'), findsOneWidget);
-    expect(find.text('2026-10'), findsNothing);
-    final monthPosition = tester.getTopLeft(find.text('10月'));
-    final countPosition = tester.getTopLeft(find.text('3 项'));
-    expect(monthPosition.dx, lessThan(countPosition.dx));
-    expect(monthPosition.dy, lessThan(countPosition.dy));
-    expect(tester.widget<Text>(find.text('10月')).style?.shadows, isNotEmpty);
-    expect(tester.widget<Text>(find.text('3 项')).style?.shadows, isNotEmpty);
+    expect(find.byKey(const Key('similar-groups')), findsOneWidget);
+    expect(find.text('第 1 组 · 2 张'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('similar-photo')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ReviewScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('photo')), findsOneWidget);
+  });
+
+  testWidgets(
+    'media grids hide dates and all media only exposes pending when enabled',
+    (tester) async {
+      final store = ScopeAppStore(database);
+      final app = CleanerState(store, FakeMediaRepository());
+
+      await tester.pumpWidget(
+        MaterialApp(home: ScopeScreen(app, Scope.month('2026-10'))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1970-01-01'), findsNothing);
+
+      await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+      await tester.pumpAndSettle();
+      expect(find.text('1970-01-01'), findsNothing);
+      expect(find.byKey(const Key('pending-filter-entry')), findsNothing);
+
+      app.downAction = DownSwipeAction.pending;
+      await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('pending-filter-entry')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('pending-filter-entry')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('library-view-toggle')), findsNothing);
+      expect(find.byKey(const Key('library-time-controls')), findsNothing);
+    },
+  );
+
+  testWidgets('home navigation floats on glass and animates tab changes', (
+    tester,
+  ) async {
+    final app = CleanerState(ScopeAppStore(database), AlbumsMediaRepository());
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-glass-nav')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-glass-nav')),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('相册'));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.byType(FadeTransition), findsWidgets);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('library controls collapse on scroll and switch time ranges', (
+    tester,
+  ) async {
+    final app = CleanerState(
+      LongScopeAppStore(database, initialAnchor: 'photo-0'),
+      AlbumsMediaRepository(),
+    );
+    app.months = [('2026-10', 3), ('2026-09', 2)];
+
+    await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('library-view-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('library-time-controls')), findsNothing);
+
+    await tester.drag(
+      find.byKey(const Key('scope-media-grid')),
+      const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('library-circle-button')), findsOneWidget);
+    expect(find.byKey(const Key('library-time-controls')), findsOneWidget);
+    final libraryGlass = tester
+        .widgetList<DecoratedBox>(
+          find.ancestor(
+            of: find.byKey(const Key('library-circle-button')),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .first;
+    expect(
+      (libraryGlass.decoration as BoxDecoration).color,
+      const Color(0x70FFFFFF),
+    );
+    final libraryIcon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('library-circle-button')),
+        matching: find.byIcon(Icons.photo_library_outlined),
+      ),
+    );
+    expect(libraryIcon.color, const Color(0xFF1557F8));
+    final selectedMode = tester
+        .widgetList<Material>(
+          find.descendant(
+            of: find.byKey(const ValueKey('library-mode-all')),
+            matching: find.byType(Material),
+          ),
+        )
+        .first;
+    expect(selectedMode.color, const Color(0xB8E2E9FF));
+
+    await tester.tap(find.byKey(const ValueKey('library-mode-month')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('library-month-grid')), findsOneWidget);
+    expect(find.text('2026年10月'), findsOneWidget);
+    expect(tester.getSize(find.text('2026年10月')).height, lessThan(28));
+
+    await tester.tap(find.byKey(const Key('library-circle-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('library-albums-view')), findsOneWidget);
+    expect(find.text('Camera'), findsOneWidget);
+  });
+
+  testWidgets('video thumbnails show duration at the bottom-right', (
+    tester,
+  ) async {
+    final app = CleanerState(
+      VideoScopeAppStore(database),
+      FakeMediaRepository(),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.videos)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0:08'), findsOneWidget);
+    expect(find.byIcon(Icons.play_circle_fill), findsNothing);
+  });
+
+  testWidgets('a reviewed video still opens the tapped video from all media', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ScopeScreen(
+          CleanerState(
+            ReviewedVideoScopeAppStore(database),
+            FakeMediaRepository(),
+          ),
+          Scope.all,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('0:08'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(const ValueKey('video')), findsOneWidget);
+  });
+
+  testWidgets('pending review can restore and down only returns to its list', (
+    tester,
+  ) async {
+    final store = UndoAppStore(database);
+    final app = CleanerState(store, FakeMediaRepository())
+      ..downAction = DownSwipeAction.pending;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            key: const Key('open-pending-review'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => ReviewScreen(
+                  app,
+                  Scope.all,
+                  pendingOnly: true,
+                  source: const [photo, nextPhoto],
+                ),
+              ),
+            ),
+            child: const Text('打开待定'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('open-pending-review')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pending-restore-control')));
+    await tester.pumpAndSettle();
+    expect(store.actions, [ReviewAction.restore]);
+    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('next-photo'))),
+    );
+    await gesture.moveBy(const Offset(0, 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReviewScreen), findsNothing);
+    expect(store.actions, [ReviewAction.restore]);
   });
 
   testWidgets('home keeps one resume entry and the media grid has none', (
@@ -838,9 +1421,7 @@ void main() {
     expect(find.text('继续整理'), findsNothing);
   });
 
-  testWidgets('the delete queue uses four columns and restores selections', (
-    tester,
-  ) async {
+  testWidgets('the delete queue restores selections', (tester) async {
     final store = QueueAppStore(database, ['photo', 'next-photo']);
 
     await tester.pumpWidget(
@@ -850,10 +1431,6 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
-    final grid = tester.widget<GridView>(find.byType(GridView));
-    final delegate =
-        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-    expect(delegate.crossAxisCount, 4);
     expect(find.text('恢复 0 项'), findsOneWidget);
     expect(find.text('删除 0 项'), findsOneWidget);
 
@@ -865,6 +1442,7 @@ void main() {
     await tester.tap(find.text('恢复 1 项'));
     await tester.pumpAndSettle();
     expect(store.ids, ['next-photo']);
+    expect(find.byType(SnackBar), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -880,5 +1458,27 @@ void main() {
     );
     expect(viewer.maxScale, 4);
     expect(find.text('全屏预览'), findsOneWidget);
+  });
+
+  testWidgets('delete result reports cleaned items and estimated space', (
+    tester,
+  ) async {
+    final store = QueueAppStore(database, ['photo']);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueueScreen(CleanerState(store, DeletingMediaRepository())),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('删除 1 项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('继续删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('清理完成'), findsOneWidget);
+    expect(find.text('本次清理 1 项'), findsOneWidget);
+    expect(find.text('预计涉及空间 2.0 MB'), findsOneWidget);
   });
 }

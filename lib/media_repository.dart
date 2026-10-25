@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:photo_manager/photo_manager.dart';
 
@@ -8,6 +9,7 @@ import 'store.dart';
 enum SystemAlbumGroup { album, people, smart }
 
 bool androidUsesSystemTrash(int sdkInt) => sdkInt >= 30;
+int deleteRequestBatchSize(bool isAndroid) => isAndroid ? 1 : 500;
 
 class SystemAlbumSummary {
   const SystemAlbumSummary({
@@ -67,6 +69,43 @@ class MediaStorageSummary {
   final int liveBytes;
   final int unknownItems;
   final int totalItems;
+}
+
+class SimilarPhotoGroup {
+  const SimilarPhotoGroup(this.items);
+
+  final List<MediaRecord> items;
+}
+
+int photoHashDistance(String left, String right) {
+  var difference =
+      BigInt.parse(left, radix: 16) ^ BigInt.parse(right, radix: 16);
+  var distance = 0;
+  while (difference != BigInt.zero) {
+    difference &= difference - BigInt.one;
+    distance++;
+  }
+  return distance;
+}
+
+List<List<String>> groupSimilarPhotoHashes(
+  Map<String, String> hashes, {
+  int maxDistance = 6,
+}) {
+  final groups = <List<String>>[];
+  for (final entry in hashes.entries) {
+    final group = groups.where(
+      (candidate) =>
+          photoHashDistance(entry.value, hashes[candidate.first]!) <=
+          maxDistance,
+    );
+    if (group.isEmpty) {
+      groups.add([entry.key]);
+    } else {
+      group.first.add(entry.key);
+    }
+  }
+  return groups.where((group) => group.length > 1).toList();
 }
 
 class MediaRepository {
@@ -413,6 +452,87 @@ class MediaRepository {
     );
   }
 
+  Future<String?> _similarityHash(String id) async {
+    final bytes = await thumbnail(id, 96, 96);
+    if (bytes == null) return null;
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 9,
+      targetHeight: 8,
+    );
+    try {
+      final frame = await codec.getNextFrame();
+      try {
+        final pixels = await frame.image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        if (pixels == null || frame.image.width < 9 || frame.image.height < 8) {
+          return null;
+        }
+        int brightness(int x, int y) {
+          final offset = (y * frame.image.width + x) * 4;
+          return pixels.getUint8(offset) * 299 +
+              pixels.getUint8(offset + 1) * 587 +
+              pixels.getUint8(offset + 2) * 114;
+        }
+
+        var hash = BigInt.zero;
+        for (var y = 0; y < 8; y++) {
+          for (var x = 0; x < 8; x++) {
+            hash <<= 1;
+            if (brightness(x, y) > brightness(x + 1, y)) {
+              hash |= BigInt.one;
+            }
+          }
+        }
+        return hash.toRadixString(16).padLeft(16, '0');
+      } finally {
+        frame.image.dispose();
+      }
+    } finally {
+      codec.dispose();
+    }
+  }
+
+  Future<List<SimilarPhotoGroup>> findSimilarPhotos(
+    AppStore store,
+    void Function(int, int) onProgress,
+  ) async {
+    final photos = await store.photoRecords();
+    final hashes = await store.similarityHashes();
+    final missing = photos.where((photo) => !hashes.containsKey(photo.id));
+    final missingPhotos = missing.toList();
+    var processed = photos.length - missingPhotos.length;
+    onProgress(processed, photos.length);
+    for (var start = 0; start < missingPhotos.length; start += 8) {
+      final batch = missingPhotos.skip(start).take(8).toList();
+      final values = await Future.wait(
+        batch.map((photo) async {
+          try {
+            return await _similarityHash(photo.id);
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      for (var index = 0; index < batch.length; index++) {
+        final hash = values[index];
+        if (hash == null) continue;
+        hashes[batch[index].id] = hash;
+        await store.saveSimilarityHash(batch[index].id, hash);
+      }
+      processed += batch.length;
+      onProgress(processed, photos.length);
+    }
+    final records = {for (final photo in photos) photo.id: photo};
+    final orderedHashes = {
+      for (final photo in photos) photo.id: ?hashes[photo.id],
+    };
+    return groupSimilarPhotoHashes(orderedHashes)
+        .map((ids) => SimilarPhotoGroup([for (final id in ids) ?records[id]]))
+        .toList();
+  }
+
   Future<File?> videoFile(String id) async {
     final asset = await get(id);
     if (asset?.type != AssetType.video) return null;
@@ -424,6 +544,27 @@ class MediaRepository {
     return androidUsesSystemTrash(
       int.parse(await PhotoManager.systemVersion()),
     );
+  }
+
+  Future<Map<String, int>> mediaSizes(Iterable<String> ids) async {
+    final result = <String, int>{};
+    final list = ids.toList();
+    for (var start = 0; start < list.length; start += 12) {
+      final batch = list.skip(start).take(12).toList();
+      final sizes = await Future.wait(
+        batch.map((id) async {
+          try {
+            return await (await get(id))?.fileSize ?? 0;
+          } catch (_) {
+            return 0;
+          }
+        }),
+      );
+      for (var index = 0; index < batch.length; index++) {
+        result[batch[index]] = sizes[index];
+      }
+    }
+    return result;
   }
 
   Future<Map<String, String>> deleteReviewedMedia(
@@ -444,8 +585,10 @@ class MediaRepository {
         assets.add(asset);
       }
     }
-    for (var start = 0; start < assets.length; start += 500) {
-      final batch = assets.skip(start).take(500).toList();
+    // Keep Android system approval scoped to exactly one media item.
+    final batchSize = deleteRequestBatchSize(Platform.isAndroid);
+    for (var start = 0; start < assets.length; start += batchSize) {
+      final batch = assets.skip(start).take(batchSize).toList();
       for (final asset in batch) {
         await store.setQueueStatus(asset.id, 'submitting');
       }

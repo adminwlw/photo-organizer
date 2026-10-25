@@ -59,10 +59,15 @@ class Scope {
   static Scope month(String month) =>
       Scope('month:$month', month == 'unknown' ? '时间未知' : month);
 
+  static Scope year(String year) => Scope('year:$year', year);
+
   (String, List<Object?>) get filter {
     if (key == 'all') return ('1=1', []);
     if (key.startsWith('month:')) {
       return ('m.month = ?', [key.substring(6)]);
+    }
+    if (key.startsWith('year:')) {
+      return ('m.month LIKE ?', ['${key.substring(5)}-%']);
     }
     return switch (key) {
       'category:screenshot' => ('m.screenshot = 1', []),
@@ -74,7 +79,7 @@ class Scope {
   }
 }
 
-enum ReviewAction { delete, pending, keep, skip }
+enum ReviewAction { delete, pending, keep, skip, restore }
 
 class ReviewProgress {
   const ReviewProgress({
@@ -129,7 +134,7 @@ class AppStore {
     final base = path == null ? await getDatabasesPath() : null;
     final db = await openDatabase(
       path ?? '$base/album_cleaner.db',
-      version: 2,
+      version: 3,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE media_cache (
@@ -159,6 +164,8 @@ class AppStore {
           status TEXT NOT NULL, last_error TEXT)''');
         await db.execute('''CREATE TABLE media_favorite (
           media_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)''');
+        await db.execute('''CREATE TABLE media_similarity (
+          media_id TEXT PRIMARY KEY, hash TEXT NOT NULL)''');
         await db.execute(
           '''CREATE TABLE app_settings (
           key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)''',
@@ -168,6 +175,10 @@ class AppStore {
         if (oldVersion < 2) {
           await db.execute('''CREATE TABLE media_favorite (
             media_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)''');
+        }
+        if (oldVersion < 3) {
+          await db.execute('''CREATE TABLE media_similarity (
+            media_id TEXT PRIMARY KEY, hash TEXT NOT NULL)''');
         }
       },
     );
@@ -205,8 +216,38 @@ class AppStore {
     await batch.commit(noResult: true);
   }
 
-  Future<void> finishScan(int scanId) => db
-      .delete('media_cache', where: 'last_seen_at != ?', whereArgs: [scanId])
+  Future<void> finishScan(int scanId) async {
+    await db.delete(
+      'media_cache',
+      where: 'last_seen_at != ?',
+      whereArgs: [scanId],
+    );
+    await db.rawDelete(
+      'DELETE FROM media_similarity WHERE media_id NOT IN (SELECT id FROM media_cache)',
+    );
+  }
+
+  Future<List<MediaRecord>> photoRecords() async {
+    final rows = await db.query(
+      'media_cache',
+      where: 'type = 1',
+      orderBy: 'taken_at DESC, id DESC',
+    );
+    return rows.map(MediaRecord.fromMap).toList();
+  }
+
+  Future<Map<String, String>> similarityHashes() async {
+    final rows = await db.query('media_similarity');
+    return {
+      for (final row in rows) row['media_id'] as String: row['hash'] as String,
+    };
+  }
+
+  Future<void> saveSimilarityHash(String mediaId, String hash) => db
+      .insert('media_similarity', {
+        'media_id': mediaId,
+        'hash': hash,
+      }, conflictAlgorithm: ConflictAlgorithm.replace)
       .then((_) {});
 
   Future<List<(String, int)>> months() async {
@@ -241,21 +282,53 @@ class AppStore {
     final anchorId = await anchor(scope);
     if (actionAt == null || anchorId == null) return null;
     return ReviewProgress(
-      position: await positionOf(scope, anchorId),
-      total: await count(scope),
+      position: await positionOf(scope, anchorId, unreviewedOnly: true),
+      total: await count(scope, unreviewedOnly: true),
       updatedAt: int.parse(actionAt),
     );
   }
 
-  Future<int> count(Scope scope, {bool pendingOnly = false}) async {
+  (String, List<Object?>) _decisionFilter(
+    Scope scope, {
+    required bool pendingOnly,
+    required bool unreviewedOnly,
+  }) {
+    if (pendingOnly) {
+      return (
+        '''AND EXISTS (SELECT 1 FROM scope_decision d
+          WHERE d.scope_key = ? AND d.media_id = m.id)
+        AND NOT EXISTS (SELECT 1 FROM delete_queue q WHERE q.media_id = m.id)
+        AND NOT EXISTS (SELECT 1 FROM media_review r WHERE r.media_id = m.id)''',
+        [scope.key],
+      );
+    }
+    if (unreviewedOnly) {
+      return (
+        '''AND NOT EXISTS (SELECT 1 FROM delete_queue q WHERE q.media_id = m.id)
+        AND NOT EXISTS (SELECT 1 FROM media_review r WHERE r.media_id = m.id)
+        AND NOT EXISTS (SELECT 1 FROM scope_decision d
+          WHERE d.scope_key = ? AND d.media_id = m.id)''',
+        [scope.key],
+      );
+    }
+    return ('', const []);
+  }
+
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async {
     final (filter, args) = scope.filter;
-    final pending = pendingOnly
-        ? 'AND EXISTS (SELECT 1 FROM scope_decision d WHERE d.scope_key = ? AND d.media_id = m.id)'
-        : '';
+    final (decision, decisionArgs) = _decisionFilter(
+      scope,
+      pendingOnly: pendingOnly,
+      unreviewedOnly: unreviewedOnly,
+    );
     final rows = await db.rawQuery(
       '''SELECT COUNT(*) AS total FROM media_cache m
-      WHERE $filter $pending''',
-      [...args, if (pendingOnly) scope.key],
+      WHERE $filter $decision''',
+      [...args, ...decisionArgs],
     );
     return rows.first['total'] as int;
   }
@@ -264,23 +337,46 @@ class AppStore {
     Scope scope,
     int index, {
     bool pendingOnly = false,
+    bool unreviewedOnly = false,
   }) async {
     final (filter, args) = scope.filter;
-    final pending = pendingOnly
-        ? 'AND EXISTS (SELECT 1 FROM scope_decision d WHERE d.scope_key = ? AND d.media_id = m.id)'
-        : '';
+    final (decision, decisionArgs) = _decisionFilter(
+      scope,
+      pendingOnly: pendingOnly,
+      unreviewedOnly: unreviewedOnly,
+    );
     final rows = await db.rawQuery(
       '''SELECT m.* FROM media_cache m
-      WHERE $filter $pending ORDER BY m.taken_at DESC, m.id DESC LIMIT 1 OFFSET ?''',
-      [...args, if (pendingOnly) scope.key, index],
+      WHERE $filter $decision ORDER BY m.taken_at DESC, m.id DESC LIMIT 1 OFFSET ?''',
+      [...args, ...decisionArgs, index],
     );
     return rows.isEmpty ? null : MediaRecord.fromMap(rows.first);
+  }
+
+  Future<List<MediaRecord>> list(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async {
+    final (filter, args) = scope.filter;
+    final (decision, decisionArgs) = _decisionFilter(
+      scope,
+      pendingOnly: pendingOnly,
+      unreviewedOnly: unreviewedOnly,
+    );
+    final rows = await db.rawQuery(
+      '''SELECT m.* FROM media_cache m
+      WHERE $filter $decision ORDER BY m.taken_at DESC, m.id DESC''',
+      [...args, ...decisionArgs],
+    );
+    return rows.map(MediaRecord.fromMap).toList();
   }
 
   Future<int> positionOf(
     Scope scope,
     String id, {
     bool pendingOnly = false,
+    bool unreviewedOnly = false,
   }) async {
     final media = await db.query(
       'media_cache',
@@ -290,15 +386,27 @@ class AppStore {
     if (media.isEmpty) return 0;
     final (filter, args) = scope.filter;
     final time = media.first['taken_at'] as int;
-    final pending = pendingOnly
-        ? 'AND EXISTS (SELECT 1 FROM scope_decision d WHERE d.scope_key = ? AND d.media_id = m.id)'
-        : '';
+    final (decision, decisionArgs) = _decisionFilter(
+      scope,
+      pendingOnly: pendingOnly,
+      unreviewedOnly: unreviewedOnly,
+    );
     final rows = await db.rawQuery(
       '''SELECT COUNT(*) AS total FROM media_cache m
-      WHERE $filter $pending AND (m.taken_at > ? OR (m.taken_at = ? AND m.id > ?))''',
-      [...args, if (pendingOnly) scope.key, time, time, id],
+      WHERE $filter $decision AND (m.taken_at > ? OR (m.taken_at = ? AND m.id > ?))''',
+      [...args, ...decisionArgs, time, time, id],
     );
     return rows.first['total'] as int;
+  }
+
+  Future<Set<String>> reviewedIds(Scope scope) async {
+    final rows = await db.rawQuery(
+      '''SELECT media_id FROM delete_queue
+      UNION SELECT media_id FROM media_review
+      UNION SELECT media_id FROM scope_decision WHERE scope_key = ?''',
+      [scope.key],
+    );
+    return rows.map((row) => row['media_id'] as String).toSet();
   }
 
   Future<String?> anchor(Scope scope) async {
@@ -393,11 +501,22 @@ class AppStore {
           where: 'media_id = ?',
           whereArgs: [media.id],
         );
+        await txn.delete(
+          'scope_decision',
+          where: 'media_id = ?',
+          whereArgs: [media.id],
+        );
         await txn.insert('delete_queue', {
           'media_id': media.id,
           'marked_at': now,
           'status': 'queued',
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      } else if (action == ReviewAction.restore) {
+        await txn.delete(
+          'scope_decision',
+          where: 'media_id = ?',
+          whereArgs: [media.id],
+        );
       } else {
         await txn.delete(
           'delete_queue',
