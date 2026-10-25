@@ -103,6 +103,39 @@ void main() {
     );
   });
 
+  test('queued media is hidden from the regular media list', () async {
+    final store = await AppStore.open(path: inMemoryDatabasePath);
+    addTearDown(store.close);
+    const queued = MediaRecord(
+      id: 'queued',
+      takenAt: 2000,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    const remaining = MediaRecord(
+      id: 'remaining',
+      takenAt: 1000,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    await store.upsertMediaPage([queued, remaining], 1);
+    await store.finishScan(1);
+
+    await store.act(Scope.all, queued, ReviewAction.delete);
+
+    expect(await store.count(Scope.all), 1);
+    expect((await store.list(Scope.all)).map((item) => item.id), ['remaining']);
+    expect((await store.queue()).single['media_id'], 'queued');
+  });
+
   test(
     'restoring a pending item returns it to all media and can be undone',
     () async {

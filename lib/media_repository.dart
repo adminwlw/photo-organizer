@@ -42,8 +42,7 @@ enum SystemCategoryKind {
   longExposures,
   raw,
   cinematic,
-  spatialPhotos,
-  spatialVideos,
+  spatial,
   proRes,
   screenRecordings,
   receipts,
@@ -84,6 +83,8 @@ SystemCategoryKind? iosSystemCategoryKind(
   PMDarwinAssetCollectionSubtype.smartAlbumRAW => SystemCategoryKind.raw,
   PMDarwinAssetCollectionSubtype.smartAlbumCinematic =>
     SystemCategoryKind.cinematic,
+  PMDarwinAssetCollectionSubtype.smartAlbumSpatial =>
+    SystemCategoryKind.spatial,
   PMDarwinAssetCollectionSubtype.smartAlbumProRes => SystemCategoryKind.proRes,
   PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings =>
     SystemCategoryKind.screenRecordings,
@@ -105,7 +106,6 @@ class SystemCategorySummary {
     required this.path,
     required this.count,
     required this.coverId,
-    this.assetType,
   });
 
   final SystemCategoryKind kind;
@@ -113,7 +113,6 @@ class SystemCategorySummary {
   final AssetPathEntity path;
   final int count;
   final String? coverId;
-  final AssetType? assetType;
 }
 
 class MediaStorageSummary {
@@ -338,57 +337,20 @@ class MediaRepository {
         );
         continue;
       }
-      if (subtype != PMDarwinAssetCollectionSubtype.smartAlbumSpatial) {
-        continue;
-      }
-      final totals = <AssetType, int>{};
-      final covers = <AssetType, String>{};
-      for (var page = 0; ; page++) {
-        final assets = await path.getAssetListPaged(page: page, size: 200);
-        for (final asset in assets) {
-          if (asset.type != AssetType.image && asset.type != AssetType.video) {
-            continue;
-          }
-          totals[asset.type] = (totals[asset.type] ?? 0) + 1;
-          covers.putIfAbsent(asset.type, () => asset.id);
-        }
-        if (assets.length < 200) break;
-      }
-      for (final type in [AssetType.image, AssetType.video]) {
-        final count = totals[type] ?? 0;
-        if (count == 0) continue;
-        result.add(
-          SystemCategorySummary(
-            kind: type == AssetType.image
-                ? SystemCategoryKind.spatialPhotos
-                : SystemCategoryKind.spatialVideos,
-            label: type == AssetType.image ? '空间照片' : '空间视频',
-            path: path,
-            count: count,
-            coverId: covers[type],
-            assetType: type,
-          ),
-        );
-      }
     }
     return result;
   }
 
   Future<List<MediaRecord>> recordsForAlbum(
     AssetPathEntity path,
-    void Function(int, int) onProgress, {
-    AssetType? assetType,
-  }) async {
+    void Function(int, int) onProgress,
+  ) async {
     final total = await path.assetCountAsync;
     final records = <MediaRecord>[];
     for (var page = 0; records.length < total; page++) {
       final assets = await path.getAssetListPaged(page: page, size: 200);
       if (assets.isEmpty) break;
-      records.addAll(
-        assets
-            .where((asset) => assetType == null || asset.type == assetType)
-            .map(_recordFromAsset),
-      );
+      records.addAll(assets.map(_recordFromAsset));
       onProgress(records.length, total);
       if (assets.length < 200) break;
     }

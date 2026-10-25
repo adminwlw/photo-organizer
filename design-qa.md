@@ -145,3 +145,53 @@ final result: passed with iOS device check pending
 - findings：无 P0/P1/P2；没有需要阻塞交付的视觉差异。
 
 final result: passed
+
+---
+
+# v0.1.28 设计验收
+
+## 对照对象
+
+- 设计源图：`C:\Users\AdminWLWpc\.codex\generated_images\01a161e3-b631-70f1-bf2b-0d12e63e5763\exec-9125cb2c-84d4-408c-8e4a-8460d6cc9e5d.png`
+- 最终实现截图：`E:\DevTools\album_cleaner_workspace\ui-preview\release-v0.1.28-home-final.png`
+- 最终并排对照：`E:\DevTools\album_cleaner_workspace\ui-preview\v0.1.28-home-design-qa-comparison-final.png`
+- 队列默认态：`E:\DevTools\album_cleaner_workspace\ui-preview\release-v0.1.28-queue.png`
+- 队列拖选态：`E:\DevTools\album_cleaner_workspace\ui-preview\release-v0.1.28-queue-drag.png`
+- 设备与状态：华为 MED-AL00，Android 10，应用 `0.1.28+29`，真实相册数据，首页与待删除队列。
+- 视口：物理像素 `720 x 1600`；Flutter 逻辑宽度约 `360dp`，设备像素比约 `2.0`。
+- 密度归一：源图 `841 x 1870` 等比归一为 `720 x 1600`；实现截图原始尺寸 `720 x 1600`，并排图为 `1440 x 1600`。
+
+## Findings
+
+- 无 P0/P1/P2 遗留问题。
+- 字体与层级：标题、正文、数字的字号、字重和灰阶层级与源图一致；动态计数不同来自真机数据，不是文案偏差。
+- 间距与布局：大卡片起点、分类网格、圆角、两列间距和区块节奏在修正后与源图一致。
+- 颜色与视觉令牌：浅蓝背景、蓝色主操作、灰色辅助文本和描边对比与源图一致。
+- 图片质量：卡片使用最近三项真实相册缩略图和真实视频标记；真机最近内容恰为截图，因此主体与概念图不同，但符合“使用真实相册媒体”的产品约束。裁切清晰，无占位图或拉伸。
+- 文案与交互：`全部照片与视频`、动态数量、队列恢复/删除文案正确；真机从第一个右上角选择框横拖至第三个后连续选中 3 项，底部更新为 `恢复 3 项` / `删除 3 项`。
+- 队列控件：单项撤回位于底部中央，右上角选择框可见且触控区放大；两个底部按钮等高，宽度为 2:3。
+
+## Focused region comparison
+
+- 首页大卡片已单独检查：三图斜切、底部磨砂层、左侧图标/标题/数量、右侧圆形箭头均与方案 2 的结构一致。
+- 队列交互单独用默认态和拖选态截图检查；关键细节在全页对照中尺寸较小，因此保留上述两张真机证据。
+
+## Comparison history
+
+1. 初次实现：`ui-preview/release-v0.1.28-home.png`；大卡片高度为 `168dp`，比源图高约 40 物理像素，分类区整体下移并把队列卡片挤出首屏，记为 P2。
+2. 修正：将大卡片高度改为 `148dp`，同步更新组件测试。
+3. 修正后证据：`ui-preview/release-v0.1.28-home-final.png` 与 `ui-preview/v0.1.28-home-design-qa-comparison-final.png`；大卡片和后续分类网格的纵向位置恢复到源图节奏，无剩余 P0/P1/P2。
+
+## Follow-up polish
+
+- P3：Android 状态栏和底部浮动导航占位与概念图略有差异，导致队列卡片首屏只露出顶部；它可滚动访问，不影响核心流程，本次不继续调整平台安全区。
+
+## Verification
+
+- `flutter test`：45/45 通过。
+- `flutter analyze`：无问题。
+- Android release：构建成功、APK 签名校验通过、真机覆盖安装成功。
+- 真机版本：`versionName=0.1.28`，`versionCode=29`。
+- 主交互：启动、首页加载、进入队列、单项撤回布局、连续拖选 3 项、底部批量按钮状态均已检查。
+
+final result: passed

@@ -58,6 +58,8 @@ void main() {
       PMDarwinAssetCollectionSubtype.smartAlbumRAW: SystemCategoryKind.raw,
       PMDarwinAssetCollectionSubtype.smartAlbumCinematic:
           SystemCategoryKind.cinematic,
+      PMDarwinAssetCollectionSubtype.smartAlbumSpatial:
+          SystemCategoryKind.spatial,
       PMDarwinAssetCollectionSubtype.smartAlbumProRes:
           SystemCategoryKind.proRes,
       PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings:

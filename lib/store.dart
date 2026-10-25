@@ -311,7 +311,10 @@ class AppStore {
         [scope.key],
       );
     }
-    return ('', const []);
+    return (
+      'AND NOT EXISTS (SELECT 1 FROM delete_queue q WHERE q.media_id = m.id)',
+      const [],
+    );
   }
 
   Future<int> count(

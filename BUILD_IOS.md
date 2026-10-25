@@ -4,7 +4,7 @@
 
 - App 名称：相册清理
 - Bundle ID：`com.sim360.albumcleaner.albumCleaner`
-- 版本：`0.1.27+28`
+- 版本：`0.1.28+29`
 - 最低系统：iOS 15.0
 - 照片权限说明已经写入 `ios/Runner/Info.plist`
 - 当前 App 图标仍为 Flutter 默认图标；正式上架前需要替换 `ios/Runner/Assets.xcassets/AppIcon.appiconset`。
@@ -39,6 +39,6 @@
 ## 真机验收
 
 - 首次启动的照片权限和“有限访问”流程。
-- 视频、截屏、实况、自拍、人像、空间照片、空间视频只在系统真实返回时出现。
+- 系统分类与相册使用 iOS 当前系统语言，只在 PhotoKit 真实返回时出现。
 - 删除队列触发 iOS 系统确认，取消后媒体仍保留。
 - 双指缩放、左右浏览方向和删除后的下一张顺序。

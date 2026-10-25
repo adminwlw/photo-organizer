@@ -1096,7 +1096,10 @@ void main() {
   testWidgets('home categories include all media and albums use a grid', (
     tester,
   ) async {
-    final app = CleanerState(ScopeAppStore(database), AlbumsMediaRepository());
+    final app = CleanerState(
+      ReviewedVideoScopeAppStore(database),
+      AlbumsMediaRepository(),
+    );
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
@@ -1121,7 +1124,17 @@ void main() {
     expect(find.byKey(const ValueKey('category-similar')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('category-all'))).height,
-      greaterThan(72),
+      148,
+    );
+    expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
+    expect(find.byKey(const ValueKey('all-media-cover-video')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('all-media-cover-next-photo')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('all-media-cover-video-marker-video')),
+      findsOneWidget,
     );
     expect(
       tester
@@ -1203,6 +1216,9 @@ void main() {
     final app = CleanerState(ScopeAppStore(database), SimilarMediaRepository());
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('category-similar')));
+    await tester.drag(find.byType(ListView).first, const Offset(0, -120));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('category-similar')));
     await tester.pumpAndSettle();
@@ -1460,14 +1476,54 @@ void main() {
     expect(find.text('恢复 0 项'), findsOneWidget);
     expect(find.text('删除 0 项'), findsOneWidget);
 
-    await tester.tap(find.byType(Checkbox).first);
+    final firstItem = find.byKey(const ValueKey('queue-item-photo'));
+    final firstSelector = find.byKey(const ValueKey('queue-select-photo'));
+    final firstRestore = find.byKey(const ValueKey('queue-restore-photo'));
+    expect(
+      tester.getCenter(firstSelector).dx,
+      greaterThan(tester.getCenter(firstItem).dx),
+    );
+    expect(
+      tester.getCenter(firstSelector).dy,
+      lessThan(tester.getCenter(firstItem).dy),
+    );
+    expect(
+      tester.getCenter(firstRestore).dx,
+      moreOrLessEquals(tester.getCenter(firstItem).dx, epsilon: 2),
+    );
+    expect(
+      tester.getCenter(firstRestore).dy,
+      greaterThan(tester.getCenter(firstItem).dy),
+    );
+
+    final restoreButton = find.byKey(const Key('queue-restore-selected'));
+    final deleteButton = find.byKey(const Key('queue-delete-selected'));
+    expect(
+      tester.getSize(restoreButton).height,
+      tester.getSize(deleteButton).height,
+    );
+    expect(
+      tester.getSize(deleteButton).width / tester.getSize(restoreButton).width,
+      moreOrLessEquals(1.5, epsilon: 0.03),
+    );
+
+    final gesture = await tester.startGesture(tester.getCenter(firstSelector));
+    await gesture.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('queue-item-next-photo'))),
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('恢复 2 项'), findsOneWidget);
+    expect(find.text('删除 2 项'), findsOneWidget);
+
+    await tester.tap(firstSelector);
     await tester.pump();
     expect(find.text('恢复 1 项'), findsOneWidget);
-    expect(find.text('删除 1 项'), findsOneWidget);
 
     await tester.tap(find.text('恢复 1 项'));
     await tester.pumpAndSettle();
-    expect(store.ids, ['next-photo']);
+    expect(store.ids, ['photo']);
     expect(find.byType(SnackBar), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });

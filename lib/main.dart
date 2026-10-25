@@ -473,6 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int tab = 0;
   late Future<List<SystemAlbumSummary>> systemAlbums;
   late Future<List<SystemCategorySummary>> systemCategories;
+  late Future<List<MediaRecord>> allMediaCover;
   MediaStorageSummary? storage;
   bool storageLoading = false;
   int storageProcessed = 0;
@@ -485,11 +486,18 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     systemAlbums = app.media.systemAlbums();
     systemCategories = app.media.systemCategories();
+    allMediaCover = _loadAllMediaCover();
   }
+
+  Future<List<MediaRecord>> _loadAllMediaCover() async => (await Future.wait([
+    for (var index = 0; index < 3; index++) app.store.at(Scope.all, index),
+  ])).whereType<MediaRecord>().toList();
 
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() => allMediaCover = _loadAllMediaCover());
+    }
   }
 
   Future<void> _calculateStorage() async {
@@ -516,6 +524,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       systemAlbums = app.media.systemAlbums();
       systemCategories = app.media.systemCategories();
+      allMediaCover = _loadAllMediaCover();
       storage = null;
       storageProcessed = 0;
       storageTotal = 0;
@@ -868,8 +877,7 @@ class _HomeScreenState extends State<HomeScreen> {
       SystemCategoryKind.longExposures => '长曝光',
       SystemCategoryKind.raw => 'RAW',
       SystemCategoryKind.cinematic => '电影效果',
-      SystemCategoryKind.spatialPhotos => '空间照片',
-      SystemCategoryKind.spatialVideos => '空间视频',
+      SystemCategoryKind.spatial => '空间',
       SystemCategoryKind.proRes => 'ProRes',
       SystemCategoryKind.screenRecordings => '屏幕录制',
       SystemCategoryKind.receipts => '收据',
@@ -896,8 +904,7 @@ class _HomeScreenState extends State<HomeScreen> {
     SystemCategoryKind.longExposures => Icons.shutter_speed_rounded,
     SystemCategoryKind.raw => Icons.raw_on_outlined,
     SystemCategoryKind.cinematic => Icons.movie_filter_outlined,
-    SystemCategoryKind.spatialPhotos => Icons.view_in_ar_outlined,
-    SystemCategoryKind.spatialVideos => Icons.videocam_outlined,
+    SystemCategoryKind.spatial => Icons.view_in_ar_outlined,
     SystemCategoryKind.proRes => Icons.high_quality_outlined,
     SystemCategoryKind.screenRecordings => Icons.screen_share_outlined,
     SystemCategoryKind.receipts => Icons.receipt_long_outlined,
@@ -923,7 +930,6 @@ class _HomeScreenState extends State<HomeScreen> {
             group: SystemAlbumGroup.smart,
           ),
           title: label,
-          assetType: category.assetType,
         ),
       ),
     );
@@ -978,6 +984,228 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  Widget _allMediaCoverSlice(MediaRecord item, _SlantedCoverClipper clipper) =>
+      ClipPath(
+        clipper: clipper,
+        child: ColoredBox(
+          color: Colors.white,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              MediaThumb(
+                app.media,
+                item.id,
+                key: ValueKey('all-media-cover-${item.id}'),
+                width: 520,
+                height: 260,
+              ),
+              if (item.type == 2)
+                Center(
+                  child: Container(
+                    key: ValueKey('all-media-cover-video-marker-${item.id}'),
+                    width: 34,
+                    height: 34,
+                    decoration: const BoxDecoration(
+                      color: Color(0x99000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _allMediaMosaic(List<MediaRecord> items) {
+    if (items.isEmpty) {
+      return const ColoredBox(
+        color: Color(0xFFF0F4FF),
+        child: Center(
+          child: Icon(
+            Icons.photo_library_outlined,
+            color: Color(0xFFB5C6FF),
+            size: 48,
+          ),
+        ),
+      );
+    }
+    if (items.length == 1) {
+      return MediaThumb(
+        app.media,
+        items.first.id,
+        key: ValueKey('all-media-cover-${items.first.id}'),
+        width: 760,
+        height: 340,
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned(
+              left: 0,
+              right: items.length == 2 ? width * 0.44 : width * 0.48,
+              top: 0,
+              bottom: 0,
+              child: _allMediaCoverSlice(
+                items[0],
+                const _SlantedCoverClipper(bottomRight: 22),
+              ),
+            ),
+            if (items.length == 2)
+              Positioned(
+                left: width * 0.48,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: _allMediaCoverSlice(
+                  items[1],
+                  const _SlantedCoverClipper(topLeft: 22),
+                ),
+              )
+            else ...[
+              Positioned(
+                left: width * 0.39,
+                right: width * 0.17,
+                top: 0,
+                bottom: 0,
+                child: _allMediaCoverSlice(
+                  items[1],
+                  const _SlantedCoverClipper(topLeft: 22, bottomRight: 22),
+                ),
+              ),
+              Positioned(
+                left: width * 0.72,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: _allMediaCoverSlice(
+                  items[2],
+                  const _SlantedCoverClipper(topLeft: 22),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _allMediaCategoryTile() => FutureBuilder<int>(
+    future: app.store.count(Scope.all),
+    builder: (context, count) => Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('category-all'),
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => _open(ScopeScreen(app, Scope.all)),
+        child: Ink(
+          height: 148,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F4FF),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFDCE5FF)),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(21),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                FutureBuilder<List<MediaRecord>>(
+                  future: allMediaCover,
+                  builder: (context, snapshot) =>
+                      _allMediaMosaic(snapshot.data ?? const []),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 72,
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.38),
+                              Colors.white.withValues(alpha: 0.91),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 16,
+                  right: 12,
+                  bottom: 13,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.photo_library_outlined,
+                        color: Color(0xFF1557F8),
+                        size: 25,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          '全部照片与视频',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFF10131A),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            shadows: _buttonTextShadows,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        count.hasData ? '${count.data}' : '读取中',
+                        style: const TextStyle(
+                          color: Color(0xFF687086),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          shadows: _buttonTextShadows,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1557F8),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget _scopeCategoryTile(Scope scope, IconData icon, {String? label}) =>
       FutureBuilder<int>(
         future: app.store.count(scope),
@@ -1015,14 +1243,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _categoryLayout(List<Widget> categories) => Column(
     children: [
-      SizedBox(
-        height: 84,
-        child: _scopeCategoryTile(
-          Scope.all,
-          Icons.photo_library_outlined,
-          label: '全部照片与视频',
-        ),
-      ),
+      _allMediaCategoryTile(),
       const SizedBox(height: 10),
       _compactCategoryGrid(categories),
     ],
@@ -1482,19 +1703,30 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 }
 
+class _SlantedCoverClipper extends CustomClipper<Path> {
+  const _SlantedCoverClipper({this.topLeft = 0, this.bottomRight = 0});
+
+  final double topLeft;
+  final double bottomRight;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(topLeft, 0)
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width - bottomRight, size.height)
+    ..lineTo(0, size.height)
+    ..close();
+
+  @override
+  bool shouldReclip(covariant _SlantedCoverClipper oldClipper) => false;
+}
+
 class SystemAlbumScreen extends StatefulWidget {
-  const SystemAlbumScreen(
-    this.app,
-    this.album, {
-    super.key,
-    this.title,
-    this.assetType,
-  });
+  const SystemAlbumScreen(this.app, this.album, {super.key, this.title});
 
   final CleanerState app;
   final SystemAlbumSummary album;
   final String? title;
-  final AssetType? assetType;
 
   @override
   State<SystemAlbumScreen> createState() => _SystemAlbumScreenState();
@@ -1523,7 +1755,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
           total = maximum;
         });
       }
-    }, assetType: widget.assetType);
+    });
     if (mounted) setState(() => records = result);
   }
 
@@ -1536,8 +1768,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
         builder: (_) => ReviewScreen(
           widget.app,
           Scope(
-            'album:${widget.album.path.id}'
-            '${widget.assetType == null ? '' : ':${widget.assetType!.name}'}',
+            'album:${widget.album.path.id}',
             widget.title ??
                 (widget.album.path.name.trim().isEmpty
                     ? '未命名相册'
@@ -3833,12 +4064,99 @@ class QueueScreen extends StatefulWidget {
 class _QueueScreenState extends State<QueueScreen> {
   List<Map<String, Object?>> rows = [];
   final selected = <String>{};
+  final queueGridKey = GlobalKey();
+  final queueScroll = ScrollController();
   bool busy = false;
+  int? selectionPointer;
+  int? selectionStartIndex;
+  Offset? selectionStartPosition;
+  Set<String> selectionBase = {};
+  bool selectionDragActive = false;
+  bool selectionDragValue = true;
+  String? suppressCheckboxId;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    queueScroll.dispose();
+    super.dispose();
+  }
+
+  void _selectionPointerDown(int index, PointerDownEvent event) {
+    if (busy) return;
+    selectionPointer = event.pointer;
+    selectionStartIndex = index;
+    selectionStartPosition = event.position;
+    selectionBase = Set.of(selected);
+    selectionDragActive = false;
+    suppressCheckboxId = null;
+  }
+
+  int? _queueIndexAt(Offset globalPosition) {
+    final box = queueGridKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    final local = box.globalToLocal(globalPosition);
+    if (local.dx < 8 || local.dx > box.size.width - 8 || local.dy < 0) {
+      return null;
+    }
+    final columns = _photoGridColumnCount(box.size.width);
+    const spacing = 4.0;
+    final extent = (box.size.width - 16 - spacing * (columns - 1)) / columns;
+    final stride = extent + spacing;
+    final columnPosition = local.dx - 8;
+    final column = (columnPosition / stride).floor();
+    if (column < 0 || column >= columns) return null;
+    final contentY =
+        local.dy + (queueScroll.hasClients ? queueScroll.offset : 0);
+    final row = (contentY / stride).floor();
+    final index = row * columns + column;
+    return index >= 0 && index < rows.length ? index : null;
+  }
+
+  void _selectionPointerMove(PointerMoveEvent event) {
+    final start = selectionStartIndex;
+    final origin = selectionStartPosition;
+    if (event.pointer != selectionPointer || start == null || origin == null) {
+      return;
+    }
+    if (!selectionDragActive && (event.position - origin).distance < 6) return;
+    if (!selectionDragActive) {
+      selectionDragActive = true;
+      final startId = rows[start]['media_id'] as String;
+      selectionDragValue = !selectionBase.contains(startId);
+      suppressCheckboxId = startId;
+    }
+    final target = _queueIndexAt(event.position);
+    if (target == null) return;
+    final next = Set<String>.of(selectionBase);
+    final first = start < target ? start : target;
+    final last = start > target ? start : target;
+    for (var index = first; index <= last; index++) {
+      final id = rows[index]['media_id'] as String;
+      selectionDragValue ? next.add(id) : next.remove(id);
+    }
+    if (next.length == selected.length && next.containsAll(selected)) return;
+    setState(() {
+      selected
+        ..clear()
+        ..addAll(next);
+    });
+  }
+
+  void _selectionPointerEnd(PointerEvent event) {
+    if (event.pointer != selectionPointer) return;
+    selectionPointer = null;
+    selectionStartIndex = null;
+    selectionStartPosition = null;
+    selectionDragActive = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      suppressCheckboxId = null;
+    });
   }
 
   Future<void> _load() async {
@@ -4075,6 +4393,8 @@ class _QueueScreenState extends State<QueueScreen> {
                   ),
                 )
               : GridView.builder(
+                  key: queueGridKey,
+                  controller: queueScroll,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: _photoGridColumnCount(
@@ -4088,6 +4408,7 @@ class _QueueScreenState extends State<QueueScreen> {
                     final row = rows[index];
                     final id = row['media_id'] as String;
                     return ClipRRect(
+                      key: ValueKey('queue-item-$id'),
                       borderRadius: BorderRadius.circular(14),
                       child: Stack(
                         fit: StackFit.expand,
@@ -4102,56 +4423,74 @@ class _QueueScreenState extends State<QueueScreen> {
                             ),
                           ),
                           Positioned(
-                            left: 2,
+                            right: 0,
                             top: 2,
-                            child: Transform.scale(
-                              scale: 0.82,
-                              child: Checkbox(
-                                value: selected.contains(id),
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                fillColor: WidgetStateProperty.resolveWith(
-                                  (states) =>
-                                      states.contains(WidgetState.selected)
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.black45,
+                            child: Listener(
+                              key: ValueKey('queue-select-$id'),
+                              onPointerDown: (event) =>
+                                  _selectionPointerDown(index, event),
+                              onPointerMove: _selectionPointerMove,
+                              onPointerUp: _selectionPointerEnd,
+                              onPointerCancel: _selectionPointerEnd,
+                              child: SizedBox.square(
+                                dimension: 44,
+                                child: Transform.scale(
+                                  scale: 0.95,
+                                  child: Checkbox(
+                                    value: selected.contains(id),
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    fillColor: WidgetStateProperty.resolveWith(
+                                      (states) =>
+                                          states.contains(WidgetState.selected)
+                                          ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                          : Colors.black45,
+                                    ),
+                                    side: const BorderSide(color: Colors.white),
+                                    onChanged: (value) {
+                                      if (suppressCheckboxId == id) return;
+                                      setState(() {
+                                        if (value == true) {
+                                          selected.add(id);
+                                        } else {
+                                          selected.remove(id);
+                                        }
+                                      });
+                                    },
+                                  ),
                                 ),
-                                side: const BorderSide(color: Colors.white),
-                                onChanged: (value) => setState(() {
-                                  if (value == true) {
-                                    selected.add(id);
-                                  } else {
-                                    selected.remove(id);
-                                  }
-                                }),
                               ),
                             ),
                           ),
                           Positioned(
-                            right: 3,
-                            top: 3,
-                            child: IconButton.filled(
-                              tooltip: '恢复此项',
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.black45,
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size.square(28),
-                                maximumSize: const Size.square(28),
-                                padding: EdgeInsets.zero,
+                            left: 0,
+                            right: 0,
+                            bottom: 5,
+                            child: Center(
+                              child: IconButton.filled(
+                                key: ValueKey('queue-restore-$id'),
+                                tooltip: '撤回此项',
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.black45,
+                                  foregroundColor: Colors.white,
+                                  fixedSize: const Size.square(32),
+                                  padding: EdgeInsets.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: const Icon(Icons.undo_rounded, size: 18),
+                                onPressed: busy ? null : () => _restore([id]),
                               ),
-                              icon: const Icon(
-                                Icons.undo_rounded,
-                                size: 17,
-                              ),
-                              onPressed: busy ? null : () => _restore([id]),
                             ),
                           ),
                           if (row['status'] == 'unknown' ||
                               row['status'] == 'missing')
                             Positioned(
                               left: 5,
-                              bottom: 5,
+                              top: 5,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   color: Colors.black54,
@@ -4184,22 +4523,32 @@ class _QueueScreenState extends State<QueueScreen> {
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: busy || selected.isEmpty
-                      ? null
-                      : () => _restore(selected.toList()),
-                  icon: const Icon(Icons.undo_rounded),
-                  label: Text('恢复 ${selected.length} 项'),
+                flex: 2,
+                child: SizedBox(
+                  key: const Key('queue-restore-selected'),
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: busy || selected.isEmpty
+                        ? null
+                        : () => _restore(selected.toList()),
+                    icon: const Icon(Icons.undo_rounded),
+                    label: Text('恢复 ${selected.length} 项'),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC3D55),
+                flex: 3,
+                child: SizedBox(
+                  key: const Key('queue-delete-selected'),
+                  height: 52,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC3D55),
+                    ),
+                    onPressed: busy || selected.isEmpty ? null : _process,
+                    child: Text(busy ? '等待系统处理…' : '删除 ${selected.length} 项'),
                   ),
-                  onPressed: busy || selected.isEmpty ? null : _process,
-                  child: Text(busy ? '等待系统处理…' : '删除 ${selected.length} 项'),
                 ),
               ),
             ],
