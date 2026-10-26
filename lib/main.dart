@@ -2273,6 +2273,7 @@ class _DragSelectableGrid extends StatefulWidget {
     required this.crossAxisCount,
     required this.itemCount,
     required this.itemBuilder,
+    required this.selectionKeyBuilder,
     required this.enabled,
     required this.busy,
     required this.isSelected,
@@ -2285,6 +2286,7 @@ class _DragSelectableGrid extends StatefulWidget {
   final int crossAxisCount;
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
+  final Key Function(int index) selectionKeyBuilder;
   final bool enabled;
   final bool busy;
   final bool Function(int index) isSelected;
@@ -2341,19 +2343,19 @@ class _DragSelectableGridState extends State<_DragSelectableGrid> {
     return index < widget.itemCount ? index : null;
   }
 
-  void _pointerDown(PointerDownEvent event) {
+  void _pointerDown(int index, PointerDownEvent event) {
     if (!widget.enabled || widget.busy) return;
-    final index = _indexAt(event.position);
-    if (index == null) return;
-    pointer = event.pointer;
-    startIndex = index;
-    startPosition = event.position;
-    selectionBase = {
-      for (var item = 0; item < widget.itemCount; item++)
-        if (widget.isSelected(item)) item,
-    };
-    dragActive = false;
-    dragPosition = null;
+    setState(() {
+      pointer = event.pointer;
+      startIndex = index;
+      startPosition = event.position;
+      selectionBase = {
+        for (var item = 0; item < widget.itemCount; item++)
+          if (widget.isSelected(item)) item,
+      };
+      dragActive = false;
+      dragPosition = null;
+    });
   }
 
   void _applySelection(Offset position) {
@@ -2419,7 +2421,16 @@ class _DragSelectableGridState extends State<_DragSelectableGrid> {
 
   void _pointerEnd(PointerEvent event) {
     if (event.pointer != pointer) return;
-    _resetDrag();
+    setState(_resetDrag);
+  }
+
+  void _toggleSelection(int index) {
+    final next = {
+      for (var item = 0; item < widget.itemCount; item++)
+        if (widget.isSelected(item)) item,
+    };
+    if (!next.add(index)) next.remove(index);
+    widget.onSelectionChanged(next);
   }
 
   void _resetDrag() {
@@ -2435,15 +2446,10 @@ class _DragSelectableGridState extends State<_DragSelectableGrid> {
   @override
   Widget build(BuildContext context) => Listener(
     key: surfaceKey,
-    behavior: HitTestBehavior.translucent,
-    onPointerDown: widget.enabled ? _pointerDown : null,
-    onPointerMove: widget.enabled ? _pointerMove : null,
-    onPointerUp: widget.enabled ? _pointerEnd : null,
-    onPointerCancel: widget.enabled ? _pointerEnd : null,
     child: GridView.builder(
       key: widget.gridKey,
       controller: widget.controller,
-      physics: widget.enabled ? const NeverScrollableScrollPhysics() : null,
+      physics: pointer == null ? null : const NeverScrollableScrollPhysics(),
       padding: widget.padding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: widget.crossAxisCount,
@@ -2451,7 +2457,32 @@ class _DragSelectableGridState extends State<_DragSelectableGrid> {
         mainAxisSpacing: 4,
       ),
       itemCount: widget.itemCount,
-      itemBuilder: widget.itemBuilder,
+      itemBuilder: (context, index) {
+        final item = widget.itemBuilder(context, index);
+        if (!widget.enabled) return item;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            item,
+            Positioned(
+              right: 0,
+              top: 0,
+              child: Listener(
+                key: widget.selectionKeyBuilder(index),
+                onPointerDown: (event) => _pointerDown(index, event),
+                onPointerMove: _pointerMove,
+                onPointerUp: _pointerEnd,
+                onPointerCancel: _pointerEnd,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _toggleSelection(index),
+                  child: const SizedBox.square(dimension: 44),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     ),
   );
 }
@@ -2657,6 +2688,8 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
               MediaQuery.sizeOf(context).width,
             ),
             itemCount: records!.length,
+            selectionKeyBuilder: (index) =>
+                ValueKey('album-select-${records![index].id}'),
             enabled: selecting,
             busy: queueing,
             isSelected: (index) => selected.containsKey(records![index].id),
@@ -3241,6 +3274,8 @@ class _ScopeScreenState extends State<ScopeScreen> {
         padding: padding,
         crossAxisCount: _photoGridColumnCount(MediaQuery.sizeOf(context).width),
         itemCount: itemCount,
+        selectionKeyBuilder: (index) =>
+            ValueKey('scope-select-${items?[index].id ?? index}'),
         enabled: selecting && items != null,
         busy: queueing,
         isSelected: (index) =>

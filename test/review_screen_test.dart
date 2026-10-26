@@ -1596,8 +1596,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('media-select-button')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('scope-media-photo')));
-    await tester.tap(find.byKey(const ValueKey('scope-media-next-photo')));
+    await tester.tap(find.byKey(const ValueKey('scope-select-photo')));
+    await tester.tap(find.byKey(const ValueKey('scope-select-next-photo')));
     await tester.pump();
     expect(find.text('已选择 2 项'), findsOneWidget);
     expect(find.text('加入待删除 2 项'), findsOneWidget);
@@ -1619,16 +1619,29 @@ void main() {
       tester
           .widget<GridView>(find.byKey(const Key('scope-media-grid')))
           .physics,
-      isA<NeverScrollableScrollPhysics>(),
+      isNot(isA<NeverScrollableScrollPhysics>()),
     );
 
-    final first = find.byKey(const ValueKey('scope-media-photo'));
+    final first = find.byKey(const ValueKey('scope-select-photo'));
     final second = find.byKey(const ValueKey('scope-media-next-photo'));
     var gesture = await tester.startGesture(tester.getCenter(first));
+    await tester.pump();
+    expect(
+      tester
+          .widget<GridView>(find.byKey(const Key('scope-media-grid')))
+          .physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
     await gesture.moveTo(tester.getCenter(second));
     await tester.pump();
     await gesture.up();
     await tester.pump();
+    expect(
+      tester
+          .widget<GridView>(find.byKey(const Key('scope-media-grid')))
+          .physics,
+      isNot(isA<NeverScrollableScrollPhysics>()),
+    );
     expect(find.text('已选择 2 项'), findsOneWidget);
 
     gesture = await tester.startGesture(tester.getCenter(first));
@@ -1636,6 +1649,32 @@ void main() {
     await tester.pump();
     await gesture.up();
     await tester.pump();
+    expect(find.text('已选择 0 项'), findsOneWidget);
+  });
+
+  testWidgets('all media selection mode lets ordinary drags scroll', (
+    tester,
+  ) async {
+    final app = CleanerState(
+      LongScopeAppStore(database, initialAnchor: 'photo-0'),
+      FakeMediaRepository(),
+    );
+    await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(
+      find.byKey(const Key('scope-media-grid')),
+    );
+    expect(grid.physics, isNot(isA<NeverScrollableScrollPhysics>()));
+    final before = grid.controller!.offset;
+    final first = find.byKey(const ValueKey('scope-media-photo-0'));
+    final start = tester.getRect(first).bottomLeft + const Offset(20, -20);
+    await tester.dragFrom(start, const Offset(0, -240));
+    await tester.pumpAndSettle();
+
+    expect(grid.controller!.offset, greaterThan(before));
     expect(find.text('已选择 0 项'), findsOneWidget);
   });
 
@@ -1658,7 +1697,7 @@ void main() {
     final gridFinder = find.byKey(const Key('scope-media-grid'));
     final grid = tester.widget<GridView>(gridFinder);
     final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('scope-media-photo-0'))),
+      tester.getCenter(find.byKey(const ValueKey('scope-select-photo-0'))),
     );
     await gesture.moveTo(
       Offset(
@@ -1728,8 +1767,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('media-select-button')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('album-media-photo')));
-    await tester.tap(find.byKey(const ValueKey('album-media-live-photo')));
+    await tester.tap(find.byKey(const ValueKey('album-select-photo')));
+    await tester.tap(find.byKey(const ValueKey('album-select-live-photo')));
     await tester.pump();
     expect(find.text('已选择 2 项'), findsOneWidget);
 
@@ -1763,7 +1802,7 @@ void main() {
     await tester.tap(find.byKey(const Key('media-select-button')));
     await tester.pump();
 
-    final first = find.byKey(const ValueKey('album-media-photo'));
+    final first = find.byKey(const ValueKey('album-select-photo'));
     final second = find.byKey(const ValueKey('album-media-live-photo'));
     var gesture = await tester.startGesture(tester.getCenter(first));
     await gesture.moveTo(tester.getCenter(second));
