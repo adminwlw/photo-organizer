@@ -75,6 +75,27 @@ class SimilarMediaRepository extends FakeMediaRepository {
   }
 }
 
+class CountingStorageMediaRepository extends FakeMediaRepository {
+  int storageSummaryRequests = 0;
+
+  @override
+  Future<MediaStorageSummary> storageSummary(
+    void Function(int, int) onProgress,
+  ) async {
+    storageSummaryRequests++;
+    onProgress(4, 4);
+    return const MediaStorageSummary(
+      totalBytes: 100,
+      photoBytes: 10,
+      videoBytes: 40,
+      screenshotBytes: 30,
+      liveBytes: 20,
+      unknownItems: 0,
+      totalItems: 4,
+    );
+  }
+}
+
 class FakeAppStore extends AppStore {
   FakeAppStore(super.db, {this.queueCount = 0});
 
@@ -683,15 +704,12 @@ void main() {
     final shadows = (surface.decoration as BoxDecoration).boxShadow!;
     expect(shadows, isNotEmpty);
     expect(shadows.single.color, const Color(0x3D000000));
-    final progressPosition = tester
-        .widgetList<Positioned>(
-          find.ancestor(
-            of: find.byType(LinearProgressIndicator),
-            matching: find.byType(Positioned),
-          ),
-        )
-        .firstWhere((positioned) => positioned.left == 18);
-    expect(progressPosition.bottom, 18);
+    final progressPosition = tester.widget<Positioned>(
+      find.byKey(const Key('video-progress')),
+    );
+    expect(progressPosition.left, 30);
+    expect(progressPosition.right, 30);
+    expect(progressPosition.bottom, 142);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -1344,7 +1362,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-brand')), findsOneWidget);
     expect(find.byKey(const Key('home-brand-logo')), findsOneWidget);
-    expect(find.byKey(const Key('home-settings')), findsOneWidget);
+    expect(find.byKey(const Key('home-settings')), findsNothing);
+    expect(find.byKey(const Key('home-tutorial')), findsOneWidget);
     expect(find.text('相册删除'), findsOneWidget);
     expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
@@ -1352,11 +1371,8 @@ void main() {
       find.byKey(const ValueKey('category-all')),
     );
     expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
-    expect(allMediaSize.height, inInclusiveRange(150, 180));
-    expect(
-      tester.getSize(find.byKey(const Key('review-hero'))).height,
-      76,
-    );
+    expect(allMediaSize.height, inInclusiveRange(180, 200));
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
     expect(find.text('整理进度'), findsNothing);
     expect(find.text('待删除队列'), findsNothing);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
@@ -1435,13 +1451,15 @@ void main() {
 
     await tester.tap(find.text('相册'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('album-all-media-hero')), findsOneWidget);
     expect(find.byKey(const Key('system-album-grid')), findsOneWidget);
     expect(find.text('Camera'), findsOneWidget);
     expect(find.text('QQ'), findsOneWidget);
     expect(find.text('Download'), findsOneWidget);
+    expect(find.byKey(const ValueKey('section-待删除')), findsNothing);
   });
 
-  testWidgets('all media cover uses the selected four-photo mosaic', (
+  testWidgets('all media cover uses the selected four-photo art composition', (
     tester,
   ) async {
     final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
@@ -1470,11 +1488,62 @@ void main() {
     final bottomRight = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-3')),
     );
-    expect(topLeft.top, moreOrLessEquals(topRight.top, epsilon: 0.1));
-    expect(bottomLeft.top, greaterThan(topLeft.bottom));
-    expect(bottomLeft.left, moreOrLessEquals(topLeft.left, epsilon: 0.1));
-    expect(bottomRight.left, moreOrLessEquals(topRight.left, epsilon: 0.1));
+    expect(topLeft.top, greaterThan(topRight.top));
+    expect(bottomLeft.top, greaterThan(topRight.bottom));
+    expect(bottomRight.left, greaterThan(topLeft.left));
+    expect(bottomRight.left, lessThan(bottomLeft.left));
   });
+
+  testWidgets('storage summary is reused and largest media types lead', (
+    tester,
+  ) async {
+    final media = CountingStorageMediaRepository();
+    final app = CleanerState(ScopeAppStore(database), media);
+
+    Future<void> openMy() async {
+      await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('我的'));
+      await tester.pumpAndSettle();
+    }
+
+    await openMy();
+    expect(media.storageSummaryRequests, 1);
+    expect(
+      tester.getTopLeft(find.text('视频')).dy,
+      lessThan(tester.getTopLeft(find.text('实况')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('截图')).dy,
+      lessThan(tester.getTopLeft(find.text('照片')).dy),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await openMy();
+    expect(media.storageSummaryRequests, 1);
+  });
+
+  testWidgets(
+    'my shows a pending queue only when downward pending is enabled',
+    (tester) async {
+      final app = CleanerState(
+        ScopeAppStore(database),
+        CountingStorageMediaRepository(),
+      );
+      await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('我的'));
+      await tester.pumpAndSettle();
+      expect(find.text('待定队列'), findsNothing);
+
+      app.downAction = DownSwipeAction.pending;
+      await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('我的'));
+      await tester.pumpAndSettle();
+      expect(find.text('待定队列'), findsOneWidget);
+    },
+  );
 
   testWidgets('home hides empty Android categories and shows similar count', (
     tester,
@@ -1574,6 +1643,25 @@ void main() {
     expect(await columnsAt(390), 2);
     expect(await columnsAt(600), 3);
     expect(await columnsAt(840), 4);
+  });
+
+  testWidgets('album cards do not overflow at 360 logical pixels', (
+    tester,
+  ) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    final app = CleanerState(ScopeAppStore(database), AlbumsMediaRepository());
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('all media multi-select adds items to the delete queue', (
@@ -2104,15 +2192,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('继续整理'), findsOneWidget);
     expect(find.text('回到上次位置'), findsNothing);
-    expect(
-      tester.getSize(find.byKey(const Key('review-hero'))).height,
-      76,
-    );
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
 
     await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
     await tester.pumpAndSettle();
     expect(find.text('继续整理'), findsNothing);
   });
+
+  testWidgets(
+    'review shows date and a tappable filmstrip and hides controls when zoomed',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReviewScreen(
+            CleanerState(FakeAppStore(database), FakeMediaRepository()),
+            Scope.all,
+            source: const [photo, nextPhoto, thirdPhoto],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1970年1月1日'), findsOneWidget);
+      expect(find.byKey(const Key('review-filmstrip')), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('review-filmstrip-third-photo')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('3 / 3'), findsOneWidget);
+
+      final surface = find.byKey(const Key('review-gesture'));
+      final point = tester.getCenter(surface);
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('favorite-control')), findsNothing);
+      expect(find.byKey(const Key('review-filmstrip')), findsNothing);
+
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('favorite-control')), findsOneWidget);
+    },
+  );
 
   testWidgets('the delete queue restores selections', (tester) async {
     final store = QueueAppStore(database, ['photo', 'next-photo']);
@@ -2122,7 +2246,7 @@ void main() {
         home: QueueScreen(CleanerState(store, FakeMediaRepository())),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.undo_rounded), findsOneWidget);
     expect(tester.widget<AppBar>(find.byType(AppBar)).primary, isTrue);

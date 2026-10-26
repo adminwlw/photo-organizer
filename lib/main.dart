@@ -51,6 +51,12 @@ String _formatMediaDuration(int seconds) {
   return '$minutes:${remaining.toString().padLeft(2, '0')}';
 }
 
+String _formatMediaDate(int milliseconds) {
+  if (milliseconds <= 0) return '日期未知';
+  final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+  return '${date.year}年${date.month}月${date.day}日';
+}
+
 int _photoGridColumnCount(double logicalWidth) {
   const horizontalPadding = 40.0;
   const spacing = 6.0;
@@ -377,6 +383,31 @@ class CleanerState extends ChangeNotifier {
   PermissionState? permissionState;
   DownSwipeAction downAction = DownSwipeAction.returnToAlbum;
   List<(String, int)> months = [];
+  MediaStorageSummary? storageSummary;
+  Future<MediaStorageSummary>? _storageSummaryFuture;
+
+  Future<MediaStorageSummary> loadStorageSummary(
+    void Function(int, int) onProgress,
+  ) async {
+    final cached = storageSummary;
+    if (cached != null) return cached;
+    final pending = _storageSummaryFuture;
+    if (pending != null) return pending;
+    final request = media.storageSummary(onProgress);
+    _storageSummaryFuture = request;
+    try {
+      final result = await request;
+      storageSummary = result;
+      return result;
+    } finally {
+      _storageSummaryFuture = null;
+    }
+  }
+
+  void invalidateStorageSummary() {
+    storageSummary = null;
+    _storageSummaryFuture = null;
+  }
 
   Future<void> initialize() async {
     onboarded = await store.setting('onboarded') == '1';
@@ -501,6 +532,7 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 48),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
           textStyle: const TextStyle(shadows: _buttonTextShadows),
           shape: RoundedRectangleBorder(
@@ -510,17 +542,38 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          foregroundColor: const Color(0xFF1746B6),
+          backgroundColor: const Color(0xFFEAF0FF),
+          minimumSize: const Size(44, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           textStyle: const TextStyle(shadows: _buttonTextShadows),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0xFFB8C9F4)),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFF1746B6),
+          backgroundColor: Colors.white,
+          minimumSize: const Size(48, 48),
+          side: const BorderSide(color: Color(0xFF7E9FE8), width: 1.2),
           textStyle: const TextStyle(shadows: _buttonTextShadows),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          foregroundColor: const Color(0xFF1746B6),
+          backgroundColor: Colors.white,
+          minimumSize: const Size(48, 48),
           textStyle: const TextStyle(shadows: _buttonTextShadows),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: const Color(0xFF1746B6),
+          minimumSize: const Size(44, 44),
         ),
       ),
       navigationBarTheme: const NavigationBarThemeData(
@@ -774,6 +827,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    storage = app.storageSummary;
     systemAlbums = app.media.systemAlbums();
     systemCategories = app.media.systemCategories();
     allMediaCover = _loadAllMediaCover();
@@ -806,9 +860,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _calculateStorage() async {
     if (storageLoading || storage != null) return;
+    if (app.storageSummary case final cached?) {
+      setState(() => storage = cached);
+      return;
+    }
     setState(() => storageLoading = true);
     try {
-      final result = await app.media.storageSummary((processed, total) {
+      final result = await app.loadStorageSummary((processed, total) {
         if (mounted) {
           setState(() {
             storageProcessed = processed;
@@ -825,6 +883,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshAll() async {
     await app.refresh();
     if (!mounted) return;
+    app.invalidateStorageSummary();
     setState(() {
       systemAlbums = app.media.systemAlbums();
       systemCategories = app.media.systemCategories();
@@ -846,9 +905,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
   }
 
-  Widget _sectionTitle(String title, {String? subtitle}) => Padding(
+  Widget _sectionTitle(
+    String title, {
+    String? subtitle,
+    double topPadding = 22,
+  }) => Padding(
     key: ValueKey('section-$title'),
-    padding: const EdgeInsets.fromLTRB(2, 22, 2, 12),
+    padding: EdgeInsets.fromLTRB(2, topPadding, 2, 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -895,23 +958,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      Material(
-        color: const Color(0xD9FFFFFF),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          key: const Key('home-settings'),
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => _open(SettingsScreen(app)),
-          child: const SizedBox(
-            width: 48,
-            height: 48,
-            child: Icon(
-              Icons.settings_outlined,
-              color: Color(0xFF1557F8),
-              size: 27,
-            ),
+      TextButton(
+        key: const Key('home-tutorial'),
+        onPressed: () => _open(
+          OnboardingScreen(
+            downAction: app.downAction,
+            onDone: () async => Navigator.pop(context),
           ),
         ),
+        child: const Text('使用教程'),
       ),
     ],
   );
@@ -1113,6 +1168,31 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  Widget _pendingQueueCard() => FutureBuilder<int>(
+    future: app.store.count(Scope.all, pendingOnly: true),
+    builder: (context, count) => Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 12,
+        ),
+        leading: const CircleAvatar(
+          backgroundColor: Color(0xFFFFF5E8),
+          child: Icon(Icons.schedule_outlined, color: Color(0xFFC76A00)),
+        ),
+        title: const Text(
+          '待定队列',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(count.hasData ? '${count.data} 项待稍后决定' : '正在读取'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () =>
+            _open(ScopeScreen(app, Scope.all, initialPendingOnly: true)),
+      ),
+    ),
+  );
+
   Widget _heroPhoto(MediaRecord? item, {Key? key}) => DecoratedBox(
     decoration: BoxDecoration(
       color: Colors.white,
@@ -1195,7 +1275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Positioned(
                         right: 8,
-                        top: 4,
+                        top: -6,
                         width: 112,
                         height: 82,
                         child: Transform.rotate(
@@ -1208,7 +1288,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       Positioned(
                         right: 38,
-                        top: 60,
+                        top: 50,
                         width: 108,
                         height: 80,
                         child: Transform.rotate(
@@ -1221,7 +1301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       Positioned(
                         right: -1,
-                        top: 77,
+                        top: 66,
                         width: 103,
                         height: 75,
                         child: Transform.rotate(
@@ -1551,25 +1631,73 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _allMediaMosaic(List<MediaRecord> items) {
-    return GridView.builder(
-      padding: EdgeInsets.zero,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: 4,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-      ),
-      itemBuilder: (context, index) => index < items.length
-          ? _allMediaCoverCell(items[index], index)
-          : const ColoredBox(
-              color: Color(0xFFEAF2FF),
-              child: Icon(
-                Icons.image_outlined,
-                color: Color(0xFFAAC3F8),
-                size: 24,
-              ),
+    Widget tile(int index) => index < items.length
+        ? _allMediaCoverCell(items[index], index)
+        : const ColoredBox(
+            color: Color(0xFFEAF2FF),
+            child: Icon(
+              Icons.image_outlined,
+              color: Color(0xFFAAC3F8),
+              size: 24,
             ),
+          );
+
+    Widget frame(int index, double angle) => Transform.rotate(
+      angle: angle,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x260F2D67),
+              blurRadius: 12,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: tile(index),
+        ),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 2,
+            top: 15,
+            width: constraints.maxWidth * 0.56,
+            height: constraints.maxHeight * 0.72,
+            child: frame(0, -0.045),
+          ),
+          Positioned(
+            right: 2,
+            top: 1,
+            width: constraints.maxWidth * 0.46,
+            height: constraints.maxHeight * 0.48,
+            child: frame(1, 0.055),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 1,
+            width: constraints.maxWidth * 0.47,
+            height: constraints.maxHeight * 0.45,
+            child: frame(2, -0.035),
+          ),
+          Positioned(
+            left: constraints.maxWidth * 0.36,
+            bottom: 4,
+            width: constraints.maxWidth * 0.29,
+            height: constraints.maxHeight * 0.42,
+            child: frame(3, 0.08),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1583,7 +1711,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(22),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
         child: Ink(
-          height: 168,
+          height: 188,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: const Color(0xEFFFFFFF),
@@ -1614,19 +1742,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 42,
-                          height: 42,
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
                             color: const Color(0xFFF4F1FF),
-                            borderRadius: BorderRadius.circular(13),
+                            borderRadius: BorderRadius.circular(11),
                           ),
                           child: const Icon(
                             Icons.photo_library_outlined,
                             color: Color(0xFF4D51EE),
-                            size: 23,
+                            size: 20,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 5),
                         const Text(
                           '全部照片与视频',
                           maxLines: 2,
@@ -1649,33 +1777,43 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const Spacer(),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                count.hasData ? '${count.data}' : '读取中',
-                                style: const TextStyle(
-                                  color: Color(0xFF245BF0),
-                                  fontSize: 30,
-                                  height: 1,
+                        Text(
+                          count.hasData ? '${count.data} 项' : '读取中',
+                          style: const TextStyle(
+                            color: Color(0xFF245BF0),
+                            fontSize: 18,
+                            height: 1,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Container(
+                          height: 34,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF0FF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFB8C9F4)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '立即清理',
+                                style: TextStyle(
+                                  color: Color(0xFF1746B6),
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                            ),
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF2F5FD),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
+                              SizedBox(width: 3),
+                              Icon(
                                 Icons.arrow_forward_rounded,
-                                color: Color(0xFF245BF0),
-                                size: 21,
+                                color: Color(0xFF1746B6),
+                                size: 17,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -1911,12 +2049,17 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _albumGrid(String title, List<SystemAlbumSummary> albums, {Key? key}) {
+  Widget _albumGrid(
+    String title,
+    List<SystemAlbumSummary> albums, {
+    Key? key,
+    double topPadding = 22,
+  }) {
     if (albums.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(title),
+        _sectionTitle(title, topPadding: topPadding),
         GridView.builder(
           key: key,
           shrinkWrap: true,
@@ -1928,13 +2071,126 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             crossAxisSpacing: 12,
             mainAxisSpacing: 16,
-            childAspectRatio: 0.9,
+            childAspectRatio: 0.84,
           ),
           itemBuilder: (context, index) => _albumCard(albums[index]),
         ),
       ],
     );
   }
+
+  Widget _albumAllMediaHero() => FutureBuilder<int>(
+    future: app.store.count(Scope.all),
+    builder: (context, count) => Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('album-all-media-hero'),
+        borderRadius: BorderRadius.circular(28),
+        onTap: () => _open(ScopeScreen(app, Scope.all)),
+        child: Ink(
+          height: 176,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF163F9D), Color(0xFF5B73F2)],
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x2E264FB8),
+                blurRadius: 22,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Stack(
+            clipBehavior: Clip.antiAlias,
+            children: [
+              Positioned(
+                right: -34,
+                top: -42,
+                child: Container(
+                  width: 190,
+                  height: 190,
+                  decoration: const BoxDecoration(
+                    color: Color(0x22FFFFFF),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 16,
+                top: 22,
+                width: 150,
+                height: 132,
+                child: FutureBuilder<List<MediaRecord>>(
+                  future: allMediaCover,
+                  builder: (context, snapshot) {
+                    final items = snapshot.data ?? const <MediaRecord>[];
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        for (var i = 0; i < items.take(3).length; i++)
+                          Positioned(
+                            left: i * 24,
+                            top: i.isEven ? 5 : 28,
+                            width: 92,
+                            height: 104,
+                            child: Transform.rotate(
+                              angle: (i - 1) * 0.09,
+                              child: _heroPhoto(
+                                items[i],
+                                key: ValueKey(
+                                  'album-hero-thumb-${items[i].id}',
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 22, 166, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.photo_library_outlined,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    const Spacer(),
+                    const Text(
+                      '全部照片与视频',
+                      maxLines: 2,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        height: 1.12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      count.hasData ? '${count.data} 项 · 打开图库' : '正在读取图库',
+                      style: const TextStyle(
+                        color: Color(0xFFDCE6FF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _albumCategories() => FutureBuilder<List<SystemAlbumSummary>>(
     future: systemAlbums,
@@ -1952,10 +2208,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
         children: [
-          SizedBox(
-            height: 150,
-            child: _scopeTile(Scope.all, Icons.photo_library_outlined),
-          ),
+          _albumAllMediaHero(),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 26),
@@ -1963,7 +2216,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           _albumGrid('手机相册', personal, key: const Key('system-album-grid')),
           _albumGrid('人物', people),
-          _albumGrid('系统分类', smart),
+          _albumGrid('系统分类', smart, topPadding: 6),
           if (!Platform.isIOS) ...[
             _sectionTitle('媒体类型'),
             _tileGrid([
@@ -1971,8 +2224,6 @@ class _HomeScreenState extends State<HomeScreen> {
               _scopeTile(Scope.videos, Icons.play_circle_outline),
             ]),
           ],
-          _sectionTitle('待删除'),
-          _queueCard(),
         ],
       );
     },
@@ -1980,124 +2231,120 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _albums() => _albumCategories();
 
-  Widget _storageOverview() => Card(
-    margin: EdgeInsets.zero,
-    child: Padding(
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '相册空间',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            storage != null
-                ? _formatBytes(storage!.totalBytes)
-                : storageLoading
-                ? '正在计算授权媒体…'
-                : '等待计算',
-            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 14),
-          if (storageLoading)
-            LinearProgressIndicator(
-              value: storageTotal == 0 ? null : storageProcessed / storageTotal,
-              borderRadius: BorderRadius.circular(8),
-            )
-          else if (storage != null && storage!.totalBytes > 0)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Row(
-                children: [
-                  if (storage!.photoBytes > 0)
-                    Expanded(
-                      flex: storage!.photoBytes,
-                      child: const ColoredBox(
-                        color: Color(0xFF1557F8),
-                        child: SizedBox(height: 14),
-                      ),
-                    ),
-                  if (storage!.videoBytes > 0)
-                    Expanded(
-                      flex: storage!.videoBytes,
-                      child: const ColoredBox(
-                        color: Color(0xFFFF9B37),
-                        child: SizedBox(height: 14),
-                      ),
-                    ),
-                  if (storage!.screenshotBytes > 0)
-                    Expanded(
-                      flex: storage!.screenshotBytes,
-                      child: const ColoredBox(
-                        color: Color(0xFF7C4DFF),
-                        child: SizedBox(height: 14),
-                      ),
-                    ),
-                  if (storage!.liveBytes > 0)
-                    Expanded(
-                      flex: storage!.liveBytes,
-                      child: const ColoredBox(
-                        color: Color(0xFF2F8A67),
-                        child: SizedBox(height: 14),
-                      ),
-                    ),
-                ],
-              ),
+  List<(String, int?, Color)> _storageMetrics() {
+    final metrics = <(String, int?, Color)>[
+      ('照片', storage?.photoBytes, const Color(0xFF1557F8)),
+      ('视频', storage?.videoBytes, const Color(0xFFFF9B37)),
+      ('截图', storage?.screenshotBytes, const Color(0xFF7C4DFF)),
+      ('实况', storage?.liveBytes, const Color(0xFF2F8A67)),
+    ];
+    metrics.sort((left, right) => (right.$2 ?? 0).compareTo(left.$2 ?? 0));
+    return metrics;
+  }
+
+  Widget _storageOverview() {
+    final metrics = _storageMetrics();
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '相册空间',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _storageMetric(
-                  '照片',
-                  storage?.photoBytes,
-                  const Color(0xFF1557F8),
-                ),
-              ),
-              const SizedBox(width: 22),
-              Expanded(
-                child: _storageMetric(
-                  '视频',
-                  storage?.videoBytes,
-                  const Color(0xFFFF9B37),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _storageMetric(
-                  '截图',
-                  storage?.screenshotBytes,
-                  const Color(0xFF7C4DFF),
-                ),
-              ),
-              const SizedBox(width: 22),
-              Expanded(
-                child: _storageMetric(
-                  '实况',
-                  storage?.liveBytes,
-                  const Color(0xFF2F8A67),
-                ),
-              ),
-            ],
-          ),
-          if (storage?.unknownItems case final unknown? when unknown > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(
-                '$unknown 项暂时无法取得大小，以上为当前授权范围的估算值。',
-                style: const TextStyle(color: Color(0xFF818895), fontSize: 12),
-              ),
+            const SizedBox(height: 5),
+            Text(
+              storage != null
+                  ? _formatBytes(storage!.totalBytes)
+                  : storageLoading
+                  ? '正在计算授权媒体…'
+                  : '等待计算',
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
             ),
-        ],
+            const SizedBox(height: 14),
+            if (storageLoading)
+              LinearProgressIndicator(
+                value: storageTotal == 0
+                    ? null
+                    : storageProcessed / storageTotal,
+                borderRadius: BorderRadius.circular(8),
+              )
+            else if (storage != null && storage!.totalBytes > 0)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    for (final metric in metrics)
+                      if ((metric.$2 ?? 0) > 0)
+                        Expanded(
+                          flex: metric.$2!,
+                          child: ColoredBox(
+                            color: metric.$3,
+                            child: const SizedBox(height: 14),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _storageMetric(
+                    metrics[0].$1,
+                    metrics[0].$2,
+                    metrics[0].$3,
+                  ),
+                ),
+                const SizedBox(width: 22),
+                Expanded(
+                  child: _storageMetric(
+                    metrics[1].$1,
+                    metrics[1].$2,
+                    metrics[1].$3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _storageMetric(
+                    metrics[2].$1,
+                    metrics[2].$2,
+                    metrics[2].$3,
+                  ),
+                ),
+                const SizedBox(width: 22),
+                Expanded(
+                  child: _storageMetric(
+                    metrics[3].$1,
+                    metrics[3].$2,
+                    metrics[3].$3,
+                  ),
+                ),
+              ],
+            ),
+            if (storage?.unknownItems case final unknown? when unknown > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  '$unknown 项暂时无法取得大小，以上为当前授权范围的估算值。',
+                  style: const TextStyle(
+                    color: Color(0xFF818895),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _storageMetric(String label, int? bytes, Color color) => Row(
     children: [
@@ -2122,6 +2369,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _storageOverview(),
       _sectionTitle('待处理'),
       _queueCard(),
+      if (app.downAction == DownSwipeAction.pending) ...[
+        const SizedBox(height: 12),
+        _pendingQueueCard(),
+      ],
       _sectionTitle('偏好与帮助'),
       Card(
         margin: EdgeInsets.zero,
@@ -2933,10 +3184,12 @@ class ScopeScreen extends StatefulWidget {
     this.scope, {
     super.key,
     this.startReview = false,
+    this.initialPendingOnly = false,
   });
   final CleanerState app;
   final Scope scope;
   final bool startReview;
+  final bool initialPendingOnly;
 
   @override
   State<ScopeScreen> createState() => _ScopeScreenState();
@@ -2964,6 +3217,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
   @override
   void initState() {
     super.initState();
+    pendingOnly = widget.initialPendingOnly;
     _refresh();
   }
 
@@ -3864,6 +4118,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   int total = 0;
   MediaRecord? current;
   Uint8List? currentPreview;
+  Size? currentMediaSize;
   MediaRecord? incoming;
   Uint8List? incomingPreview;
   MediaRecord? previousItem;
@@ -3871,6 +4126,9 @@ class _ReviewScreenState extends State<ReviewScreen>
   MediaRecord? nextItem;
   Uint8List? nextPreview;
   final Map<String, Future<Uint8List?>> previewCache = {};
+  final Map<String, Future<Size?>> mediaSizeCache = {};
+  final Map<int, Future<MediaRecord?>> filmstripItemCache = {};
+  final ScrollController filmstripController = ScrollController();
   int queueCount = 0;
   final List<ActionSnapshot> undoHistory = [];
   bool currentFavorite = false;
@@ -3922,6 +4180,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     edgeNotice = null;
     edgeNoticeTimer?.cancel();
     motion.dispose();
+    filmstripController.dispose();
     gestureFrame.dispose();
     super.dispose();
   }
@@ -4067,11 +4326,13 @@ class _ReviewScreenState extends State<ReviewScreen>
 
   Future<void> _load() async {
     final (item, preview) = await _loadAt(index);
+    final mediaSize = item == null ? null : await _mediaSize(item.id, preview);
     final favorite = item != null && await widget.app.store.isFavorite(item.id);
     if (!mounted) return;
     setState(() {
       current = item;
       currentPreview = preview;
+      currentMediaSize = mediaSize;
       currentFavorite = favorite;
       incoming = null;
       incomingPreview = null;
@@ -4087,6 +4348,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     });
     if (item != null) await widget.app.store.saveAnchor(widget.scope, item);
     _prefetchAround(index);
+    _centerFilmstrip();
   }
 
   Future<MediaRecord?> _itemAt(int target) async {
@@ -4099,6 +4361,25 @@ class _ReviewScreenState extends State<ReviewScreen>
             unreviewedOnly: !widget.pendingOnly,
           )
         : sourceItems![target];
+  }
+
+  Future<MediaRecord?> _filmstripItemAt(int target) =>
+      filmstripItemCache.putIfAbsent(target, () => _itemAt(target));
+
+  void _centerFilmstrip() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !filmstripController.hasClients) return;
+      final position = filmstripController.position;
+      final target = (index * 58.0 - position.viewportDimension / 2 + 29).clamp(
+        0.0,
+        position.maxScrollExtent,
+      );
+      filmstripController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   Future<Uint8List?> _previewFor(MediaRecord item) {
@@ -4115,6 +4396,21 @@ class _ReviewScreenState extends State<ReviewScreen>
     }
     return future;
   }
+
+  Future<Size?> _mediaSize(String id, Uint8List? bytes) =>
+      mediaSizeCache.putIfAbsent(id, () async {
+        if (bytes == null || bytes.isEmpty) return null;
+        final codec = await ui.instantiateImageCodec(bytes);
+        try {
+          final frame = await codec.getNextFrame();
+          return Size(
+            frame.image.width.toDouble(),
+            frame.image.height.toDouble(),
+          );
+        } finally {
+          codec.dispose();
+        }
+      });
 
   Future<(MediaRecord?, Uint8List?)> _loadAt(int target) async {
     final item = await _itemAt(target);
@@ -4194,8 +4490,16 @@ class _ReviewScreenState extends State<ReviewScreen>
     setState(() => busy = true);
     try {
       browseDirection = amount;
-      final cachedItem = amount > 0 ? nextItem : previousItem;
-      final cachedPreview = amount > 0 ? nextPreview : previousPreview;
+      final cachedItem = amount == 1
+          ? nextItem
+          : amount == -1
+          ? previousItem
+          : null;
+      final cachedPreview = amount == 1
+          ? nextPreview
+          : amount == -1
+          ? previousPreview
+          : null;
       final loadedItem = cachedItem ?? await _itemAt(next);
       if (loadedItem == null) return;
       if (!mounted) return;
@@ -4213,6 +4517,7 @@ class _ReviewScreenState extends State<ReviewScreen>
           : Future<Uint8List?>.value(cachedPreview);
       final favorite = widget.app.store.isFavorite(loadedItem.id);
       final loadedPreview = await preview;
+      final loadedMediaSize = await _mediaSize(loadedItem.id, loadedPreview);
       final loadedFavorite = await favorite;
       await animation;
       index = next;
@@ -4220,6 +4525,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         setState(() {
           current = loadedItem;
           currentPreview = loadedPreview;
+          currentMediaSize = loadedMediaSize;
           currentFavorite = loadedFavorite;
           incoming = null;
           incomingPreview = null;
@@ -4237,6 +4543,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       }
       await widget.app.store.saveAnchor(widget.scope, loadedItem);
       _prefetchAround(index);
+      _centerFilmstrip();
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -4279,6 +4586,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       if (removedFromView && sourceItems != null) {
         sourceItems!.removeWhere((item) => item.id == actedItem.id);
       }
+      filmstripItemCache.clear();
       total =
           sourceItems?.length ??
           await widget.app.store.count(
@@ -4297,6 +4605,9 @@ class _ReviewScreenState extends State<ReviewScreen>
         index = next;
       }
       final (loadedItem, loadedPreview) = await _loadAt(index);
+      final loadedMediaSize = loadedItem == null
+          ? null
+          : await _mediaSize(loadedItem.id, loadedPreview);
       final loadedFavorite =
           loadedItem != null &&
           await widget.app.store.isFavorite(loadedItem.id);
@@ -4310,6 +4621,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         setState(() {
           current = loadedItem;
           currentPreview = loadedPreview;
+          currentMediaSize = loadedMediaSize;
           currentFavorite = loadedFavorite;
           incoming = null;
           incomingPreview = null;
@@ -4329,6 +4641,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         await widget.app.store.saveAnchor(widget.scope, loadedItem);
       }
       _prefetchAround(index);
+      _centerFilmstrip();
     } finally {
       if (mounted) {
         setState(() => busy = false);
@@ -4446,6 +4759,26 @@ class _ReviewScreenState extends State<ReviewScreen>
     }
   }
 
+  Offset _clampZoomOffset(Offset offset, double scale, Size stageSize) {
+    if (scale <= 1) return Offset.zero;
+    final available = Size(
+      (stageSize.width - 32).clamp(1.0, double.infinity),
+      (stageSize.height - 32).clamp(1.0, double.infinity),
+    );
+    final source = currentMediaSize;
+    final displayed = source == null
+        ? available
+        : applyBoxFit(BoxFit.contain, source, available).destination;
+    final horizontal = (displayed.width * scale - stageSize.width) / 2;
+    final vertical = (displayed.height * scale - stageSize.height) / 2;
+    final maxX = horizontal > 0 ? horizontal : 0.0;
+    final maxY = vertical > 0 ? vertical : 0.0;
+    return Offset(
+      offset.dx.clamp(-maxX, maxX).toDouble(),
+      offset.dy.clamp(-maxY, maxY).toDouble(),
+    );
+  }
+
   void _onScaleUpdate(ScaleUpdateDetails details) {
     if (busy || current == null) return;
     if (details.pointerCount == 1 && zoom == 1 && details.scale == 1) {
@@ -4461,16 +4794,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         (zoomOffset - focalPoint) * scaleChange +
         focalPoint +
         details.focalPointDelta;
-    if (nextZoom == 1) {
-      nextOffset = Offset.zero;
-    } else {
-      final maxX = size.width * (nextZoom - 1) / 2;
-      final maxY = size.height * (nextZoom - 1) / 2;
-      nextOffset = Offset(
-        nextOffset.dx.clamp(-maxX, maxX).toDouble(),
-        nextOffset.dy.clamp(-maxY, maxY).toDouble(),
-      );
-    }
+    nextOffset = _clampZoomOffset(nextOffset, nextZoom, size);
     zoom = nextZoom;
     zoomOffset = nextOffset;
     dragOffset = Offset.zero;
@@ -4494,7 +4818,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         zoom = 2.5;
         final focalPoint =
             doubleTapPosition - Offset(size.width / 2, size.height / 2);
-        zoomOffset = focalPoint * (1 - zoom);
+        zoomOffset = _clampZoomOffset(focalPoint * (1 - zoom), zoom, size);
       }
       dragOffset = Offset.zero;
       dragAxis = null;
@@ -4511,6 +4835,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       undoHistory.removeLast();
       queueCount = (await widget.app.store.queue()).length;
       if (sourceOrder != null) await _refreshSource();
+      filmstripItemCache.clear();
       total =
           sourceItems?.length ??
           await widget.app.store.count(
@@ -4577,7 +4902,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                   key: ValueKey('incoming-${incoming!.id}'),
                   autoplay: false,
                   previewBytes: incomingPreview,
-                  videoProgressBottom: 18,
+                  controlsVisible: false,
                 ),
               ),
             Transform.translate(
@@ -4595,7 +4920,8 @@ class _ReviewScreenState extends State<ReviewScreen>
                       item,
                       key: ValueKey(item.id),
                       previewBytes: currentPreview,
-                      videoProgressBottom: 18,
+                      controlsVisible: zoom <= 1.001,
+                      videoProgressBottom: 142,
                     ),
                   ),
                 ),
@@ -4604,6 +4930,76 @@ class _ReviewScreenState extends State<ReviewScreen>
           ],
         );
       },
+    ),
+  );
+
+  Widget _filmstrip() => SizedBox(
+    key: const Key('review-filmstrip'),
+    height: 62,
+    child: ListView.builder(
+      controller: filmstripController,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 118),
+      itemCount: total,
+      itemBuilder: (context, target) => FutureBuilder<MediaRecord?>(
+        future: _filmstripItemAt(target),
+        builder: (context, snapshot) {
+          final media = snapshot.data;
+          final selected = target == index;
+          return GestureDetector(
+            key: media == null
+                ? ValueKey('review-filmstrip-$target')
+                : ValueKey('review-filmstrip-${media.id}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: media == null || selected || busy
+                ? null
+                : () => _move(target - index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: selected ? 58 : 50,
+              height: selected ? 58 : 50,
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A3342),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected ? Colors.white : const Color(0x8899A7BC),
+                  width: selected ? 3 : 1,
+                ),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x33000000), blurRadius: 8),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: media == null
+                  ? const Icon(Icons.image_outlined, color: Colors.white70)
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        MediaThumb(
+                          widget.app.media,
+                          media.id,
+                          width: 120,
+                          height: 120,
+                        ),
+                        if (media.type == 2)
+                          const Center(
+                            child: Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 22,
+                              shadows: [
+                                Shadow(color: Colors.black, blurRadius: 6),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+          );
+        },
+      ),
     ),
   );
 
@@ -4640,170 +5036,201 @@ class _ReviewScreenState extends State<ReviewScreen>
               )
             else
               _mediaStage(item),
-            SafeArea(
-              minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-              child: Stack(
-                children: [
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: _glassIcon(
-                      tooltip: '返回',
-                      icon: Icons.arrow_back_ios_new_rounded,
-                      onPressed: busy
-                          ? null
-                          : () => Navigator.pop(context, current?.id),
-                      diameter: 40,
-                      iconSize: 19,
-                      color: const Color(0x52FFFFFF),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: _glass(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 8,
-                      ),
-                      color: const Color(0x52FFFFFF),
-                      child: Text(
-                        item == null
-                            ? '$total / $total'
-                            : '${index + 1} / $total',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2,
+            ValueListenableBuilder<int>(
+              valueListenable: gestureFrame,
+              builder: (context, _, _) => Visibility(
+                visible: zoom <= 1.001,
+                child: SafeArea(
+                  minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: _glassIcon(
+                          tooltip: '返回',
+                          icon: Icons.arrow_back_ios_new_rounded,
+                          onPressed: busy
+                              ? null
+                              : () => Navigator.pop(context, current?.id),
+                          diameter: 44,
+                          iconSize: 19,
+                          color: const Color(0xB31A2433),
                         ),
                       ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        ValueListenableBuilder<int>(
-                          valueListenable: gestureFrame,
-                          builder: (context, _, _) {
-                            final progress =
-                                dragOffset.dy < 0 &&
-                                    dragOffset.dy.abs() > dragOffset.dx.abs()
-                                ? (dragOffset.dy.abs() /
-                                          _verticalActionDistance)
-                                      .clamp(0.0, 1.0)
-                                : 0.0;
-                            return Transform.scale(
-                              key: const Key('delete-control-scale'),
-                              scale: 1 + progress * 0.2,
-                              child: _glassIcon(
-                                tooltip: '待删除队列',
-                                icon: Icons.delete_outline_rounded,
-                                onPressed: busy
-                                    ? null
-                                    : () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                QueueScreen(widget.app),
-                                          ),
-                                        );
-                                        final latestCount =
-                                            (await widget.app.store.queue())
-                                                .length;
-                                        if (mounted) {
-                                          setState(
-                                            () => queueCount = latestCount,
-                                          );
-                                        }
-                                      },
-                                diameter: 40,
-                                iconSize: 20,
-                                color: Color.lerp(
-                                  const Color(0x52FFFFFF),
-                                  const Color(0xF2DC3D55),
-                                  progress,
-                                )!,
-                              ),
-                            );
-                          },
-                        ),
-                        if (queueCount > 0)
-                          Positioned(
-                            right: -2,
-                            top: -2,
-                            child: Container(
-                              key: const Key('queue-count-badge'),
-                              constraints: const BoxConstraints(
-                                minWidth: 24,
-                                minHeight: 24,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFDC3D55),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1.5,
-                                ),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '$queueCount',
-                                maxLines: 1,
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: _glass(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 8,
+                          ),
+                          color: const Color(0xB31A2433),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                item == null
+                                    ? '$total / $total'
+                                    : '${index + 1} / $total',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.2,
                                 ),
                               ),
-                            ),
+                              if (item != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  _formatMediaDate(item.takenAt),
+                                  style: const TextStyle(
+                                    color: Color(0xFFDDE5F2),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                      ],
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.pendingOnly)
-                          _glassIcon(
-                            key: const Key('pending-restore-control'),
-                            tooltip: '恢复',
-                            icon: Icons.undo_rounded,
-                            onPressed: busy || item == null
-                                ? null
-                                : () => _act(ReviewAction.restore),
-                          )
-                        else
-                          _glassIcon(
-                            key: const Key('favorite-control'),
-                            tooltip: currentFavorite ? '取消收藏' : '收藏',
-                            icon: currentFavorite
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            onPressed: busy || item == null
-                                ? null
-                                : _toggleFavorite,
-                            color: currentFavorite
-                                ? const Color(0xD9E9A23B)
-                                : const Color(0x52FFFFFF),
-                          ),
-                        const SizedBox(width: 12),
-                        _glassIcon(
-                          key: const Key('undo-control'),
-                          tooltip: '撤销上一步',
-                          icon: Icons.undo_rounded,
-                          onPressed: busy || undoHistory.isEmpty ? null : _undo,
                         ),
-                      ],
-                    ),
+                      ),
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            ValueListenableBuilder<int>(
+                              valueListenable: gestureFrame,
+                              builder: (context, _, _) {
+                                final progress =
+                                    dragOffset.dy < 0 &&
+                                        dragOffset.dy.abs() >
+                                            dragOffset.dx.abs()
+                                    ? (dragOffset.dy.abs() /
+                                              _verticalActionDistance)
+                                          .clamp(0.0, 1.0)
+                                    : 0.0;
+                                return Transform.scale(
+                                  key: const Key('delete-control-scale'),
+                                  scale: 1 + progress * 0.2,
+                                  child: _glassIcon(
+                                    tooltip: '待删除队列',
+                                    icon: Icons.delete_outline_rounded,
+                                    onPressed: busy
+                                        ? null
+                                        : () async {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    QueueScreen(widget.app),
+                                              ),
+                                            );
+                                            final latestCount =
+                                                (await widget.app.store.queue())
+                                                    .length;
+                                            if (mounted) {
+                                              setState(
+                                                () => queueCount = latestCount,
+                                              );
+                                            }
+                                          },
+                                    diameter: 44,
+                                    iconSize: 20,
+                                    color: Color.lerp(
+                                      const Color(0xB31A2433),
+                                      const Color(0xF2DC3D55),
+                                      progress,
+                                    )!,
+                                  ),
+                                );
+                              },
+                            ),
+                            if (queueCount > 0)
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  key: const Key('queue-count-badge'),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 24,
+                                    minHeight: 24,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDC3D55),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '$queueCount',
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 58,
+                        child: _filmstrip(),
+                      ),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.pendingOnly)
+                              _glassIcon(
+                                key: const Key('pending-restore-control'),
+                                tooltip: '恢复',
+                                icon: Icons.undo_rounded,
+                                onPressed: busy || item == null
+                                    ? null
+                                    : () => _act(ReviewAction.restore),
+                              )
+                            else
+                              _glassIcon(
+                                key: const Key('favorite-control'),
+                                tooltip: currentFavorite ? '取消收藏' : '收藏',
+                                icon: currentFavorite
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                onPressed: busy || item == null
+                                    ? null
+                                    : _toggleFavorite,
+                                color: currentFavorite
+                                    ? const Color(0xD9E9A23B)
+                                    : const Color(0xB31A2433),
+                              ),
+                            const SizedBox(width: 12),
+                            _glassIcon(
+                              key: const Key('undo-control'),
+                              tooltip: '撤销上一步',
+                              icon: Icons.undo_rounded,
+                              onPressed: busy || undoHistory.isEmpty
+                                  ? null
+                                  : _undo,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -4815,7 +5242,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   Widget _glass({
     required Widget child,
     required EdgeInsets padding,
-    Color color = const Color(0x52FFFFFF),
+    Color color = const Color(0xB31A2433),
   }) => DecoratedBox(
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(24),
@@ -4851,7 +5278,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     required VoidCallback? onPressed,
     double diameter = 48,
     double iconSize = 22,
-    Color color = const Color(0x52FFFFFF),
+    Color color = const Color(0xB31A2433),
   }) => _glass(
     padding: EdgeInsets.zero,
     color: color,
@@ -4876,12 +5303,14 @@ class MediaView extends StatefulWidget {
     this.previewBytes,
     this.autoplay = true,
     this.videoProgressBottom = 10,
+    this.controlsVisible = true,
   });
   final MediaRepository media;
   final MediaRecord item;
   final Uint8List? previewBytes;
   final bool autoplay;
   final double videoProgressBottom;
+  final bool controlsVisible;
 
   @override
   State<MediaView> createState() => _MediaViewState();
@@ -4892,6 +5321,7 @@ class _MediaViewState extends State<MediaView> {
   bool loading = false;
   bool livePhotoPressed = false;
   bool livePhotoPlaying = false;
+  bool videoCompleted = false;
 
   bool get canPlayLivePhoto =>
       widget.item.live && widget.media.supportsLivePhotoPlayback;
@@ -4906,14 +5336,33 @@ class _MediaViewState extends State<MediaView> {
 
   @override
   void dispose() {
+    player?.removeListener(_handlePlayback);
     player?.dispose();
     super.dispose();
+  }
+
+  void _handlePlayback() {
+    final controller = player;
+    if (controller == null || widget.item.type != 2 || videoCompleted) return;
+    final value = controller.value;
+    if (!value.isInitialized || value.duration <= Duration.zero) return;
+    if (value.position < value.duration) return;
+    videoCompleted = true;
+    unawaited(controller.pause());
+    unawaited(controller.seekTo(Duration.zero));
+    if (mounted) setState(() {});
   }
 
   Future<void> _play() async {
     if (loading) return;
     if (player != null) {
-      player!.value.isPlaying ? await player!.pause() : await player!.play();
+      if (videoCompleted) {
+        videoCompleted = false;
+        await player!.seekTo(Duration.zero);
+        await player!.play();
+      } else {
+        player!.value.isPlaying ? await player!.pause() : await player!.play();
+      }
       setState(() {});
       return;
     }
@@ -4928,6 +5377,8 @@ class _MediaViewState extends State<MediaView> {
         return;
       }
       player = controller;
+      controller.addListener(_handlePlayback);
+      videoCompleted = false;
       await controller.play();
     } catch (_) {
       if (mounted) {
@@ -5041,6 +5492,7 @@ class _MediaViewState extends State<MediaView> {
   Widget build(BuildContext context) {
     final showVideo =
         player?.value.isInitialized == true &&
+        !videoCompleted &&
         (widget.item.type == 2 || livePhotoPlaying);
     final media = showVideo
         ? AspectRatio(
@@ -5088,14 +5540,14 @@ class _MediaViewState extends State<MediaView> {
                     alignment: Alignment.center,
                     children: [
                       media,
-                      if (widget.item.live)
+                      if (widget.item.live && widget.controlsVisible)
                         const Positioned(
                           key: Key('live-photo-badge'),
                           left: 12,
                           top: 12,
                           child: _LivePhotoBadge(showLabel: true),
                         ),
-                      if (widget.item.type == 2)
+                      if (widget.item.type == 2 && widget.controlsVisible)
                         Positioned.fill(
                           child: Center(
                             child: IconButton.filledTonal(
@@ -5113,30 +5565,40 @@ class _MediaViewState extends State<MediaView> {
                             ),
                           ),
                         ),
-                      if (widget.item.type == 2)
-                        Positioned(
-                          key: const Key('video-progress'),
-                          left: 18,
-                          right: 18,
-                          bottom: widget.videoProgressBottom,
-                          child: DefaultTextStyle(
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              shadows: [
-                                Shadow(color: Colors.black87, blurRadius: 6),
-                              ],
-                            ),
-                            child: _videoProgress(),
-                          ),
-                        ),
                     ],
                   ),
                 ),
               ),
             ),
           ),
+          if (widget.item.type == 2 && widget.controlsVisible)
+            Positioned(
+              key: const Key('video-progress'),
+              left: 30,
+              right: 30,
+              bottom: widget.videoProgressBottom,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xB31A2433),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0x88FFFFFF)),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x33000000), blurRadius: 12),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+                  child: DefaultTextStyle(
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    child: _videoProgress(),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
