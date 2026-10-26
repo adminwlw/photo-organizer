@@ -718,6 +718,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<SystemAlbumSummary>> systemAlbums;
   late Future<List<SystemCategorySummary>> systemCategories;
   late Future<List<MediaRecord>> allMediaCover;
+  late Future<List<int>> localCategoryCounts;
+  late Future<int> similarPhotoCount;
   MediaStorageSummary? storage;
   bool storageLoading = false;
   int storageProcessed = 0;
@@ -731,11 +733,25 @@ class _HomeScreenState extends State<HomeScreen> {
     systemAlbums = app.media.systemAlbums();
     systemCategories = app.media.systemCategories();
     allMediaCover = _loadAllMediaCover();
+    localCategoryCounts = _loadLocalCategoryCounts();
+    similarPhotoCount = _loadSimilarPhotoCount();
   }
 
   Future<List<MediaRecord>> _loadAllMediaCover() async => (await Future.wait([
-    for (var index = 0; index < 3; index++) app.store.at(Scope.all, index),
+    for (var index = 0; index < 6; index++) app.store.at(Scope.all, index),
   ])).whereType<MediaRecord>().toList();
+
+  Future<List<int>> _loadLocalCategoryCounts() => Future.wait([
+    app.store.count(Scope.videos),
+    app.store.count(Scope.screenshots),
+    app.store.count(Scope.selfies),
+    app.store.count(Scope.live),
+  ]);
+
+  Future<int> _loadSimilarPhotoCount() async {
+    final groups = await app.media.findSimilarPhotos(app.store, (_, _) {});
+    return groups.fold<int>(0, (total, group) => total + group.items.length);
+  }
 
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -769,6 +785,8 @@ class _HomeScreenState extends State<HomeScreen> {
       systemAlbums = app.media.systemAlbums();
       systemCategories = app.media.systemCategories();
       allMediaCover = _loadAllMediaCover();
+      localCategoryCounts = _loadLocalCategoryCounts();
+      similarPhotoCount = _loadSimilarPhotoCount();
       storage = null;
       storageProcessed = 0;
       storageTotal = 0;
@@ -1230,42 +1248,41 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _allMediaCoverSlice(MediaRecord item, _SlantedCoverClipper clipper) =>
-      ClipPath(
-        clipper: clipper,
-        child: ColoredBox(
-          color: Colors.white,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              MediaThumb(
-                app.media,
-                item.id,
-                key: ValueKey('all-media-cover-${item.id}'),
-                width: 520,
-                height: 260,
-              ),
-              if (item.type == 2)
-                Center(
-                  child: Container(
-                    key: ValueKey('all-media-cover-video-marker-${item.id}'),
-                    width: 34,
-                    height: 34,
-                    decoration: const BoxDecoration(
-                      color: Color(0x99000000),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                ),
-            ],
+  Widget _allMediaCoverCell(MediaRecord item, int index) => ClipRect(
+    child: ColoredBox(
+      key: ValueKey('all-media-cover-cell-$index'),
+      color: Colors.white,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          MediaThumb(
+            app.media,
+            item.id,
+            key: ValueKey('all-media-cover-${item.id}'),
+            width: 520,
+            height: 260,
           ),
-        ),
-      );
+          if (item.type == 2)
+            Center(
+              child: Container(
+                key: ValueKey('all-media-cover-video-marker-${item.id}'),
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: Color(0x99000000),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
 
   Widget _allMediaMosaic(List<MediaRecord> items) {
     if (items.isEmpty) {
@@ -1289,55 +1306,48 @@ class _HomeScreenState extends State<HomeScreen> {
         height: 340,
       );
     }
+    if (items.length < 6) {
+      return Row(
+        children: [
+          for (var index = 0; index < items.length; index++)
+            Expanded(child: _allMediaCoverCell(items[index], index)),
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        const gap = 3.0;
+        final upperHeight = height * 0.44;
+        final largeWidth = width * 0.64;
+        final lowerTop = upperHeight + gap;
+        final lowerWidth = (width - gap * 3) / 4;
         return Stack(
           fit: StackFit.expand,
           children: [
             Positioned(
               left: 0,
-              right: items.length == 2 ? width * 0.44 : width * 0.48,
+              width: largeWidth,
               top: 0,
-              bottom: 0,
-              child: _allMediaCoverSlice(
-                items[0],
-                const _SlantedCoverClipper(bottomRight: 22),
-              ),
+              height: upperHeight,
+              child: _allMediaCoverCell(items[0], 0),
             ),
-            if (items.length == 2)
+            Positioned(
+              left: largeWidth + gap,
+              right: 0,
+              top: 0,
+              height: upperHeight,
+              child: _allMediaCoverCell(items[1], 1),
+            ),
+            for (var index = 0; index < 4; index++)
               Positioned(
-                left: width * 0.48,
-                right: 0,
-                top: 0,
+                left: index * (lowerWidth + gap),
+                width: lowerWidth,
+                top: lowerTop,
                 bottom: 0,
-                child: _allMediaCoverSlice(
-                  items[1],
-                  const _SlantedCoverClipper(topLeft: 22),
-                ),
-              )
-            else ...[
-              Positioned(
-                left: width * 0.39,
-                right: width * 0.17,
-                top: 0,
-                bottom: 0,
-                child: _allMediaCoverSlice(
-                  items[1],
-                  const _SlantedCoverClipper(topLeft: 22, bottomRight: 22),
-                ),
+                child: _allMediaCoverCell(items[index + 2], index + 2),
               ),
-              Positioned(
-                left: width * 0.72,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                child: _allMediaCoverSlice(
-                  items[2],
-                  const _SlantedCoverClipper(topLeft: 22),
-                ),
-              ),
-            ],
           ],
         );
       },
@@ -1354,7 +1364,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(22),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
         child: AspectRatio(
-          aspectRatio: 4 / 3,
+          aspectRatio: 1.05,
           child: Ink(
             decoration: BoxDecoration(
               color: const Color(0xFFF0F4FF),
@@ -1386,8 +1396,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                Colors.transparent,
-                                Colors.white.withValues(alpha: 0.94),
+                                Colors.white.withValues(alpha: 0),
+                                Colors.white,
                               ],
                             ),
                           ),
@@ -1456,25 +1466,15 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _scopeCategoryTile(Scope scope, IconData icon, {String? label}) =>
-      FutureBuilder<int>(
-        future: app.store.count(scope),
-        builder: (context, snapshot) => _compactCategoryTile(
-          key: ValueKey('category-${scope.key}'),
-          icon: icon,
-          label: label ?? scope.label,
-          count: snapshot.data,
-          onTap: () => _open(ScopeScreen(app, scope)),
-        ),
-      );
-
-  Widget _similarCategoryTile() => _compactCategoryTile(
-    key: const ValueKey('category-similar'),
-    icon: Icons.auto_awesome_mosaic_outlined,
-    label: '相似照片',
-    count: null,
-    countText: '分析',
-    onTap: () => _open(SimilarPhotosScreen(app)),
+  Widget _similarCategoryTile() => FutureBuilder<int>(
+    future: similarPhotoCount,
+    builder: (context, snapshot) => _compactCategoryTile(
+      key: const ValueKey('category-similar'),
+      icon: Icons.auto_awesome_mosaic_outlined,
+      label: '相似照片',
+      count: snapshot.data,
+      onTap: () => _open(SimilarPhotosScreen(app)),
+    ),
   );
 
   Widget _compactCategoryGrid(List<Widget> children) => GridView.builder(
@@ -1493,13 +1493,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _categoryGrid() {
     if (!Platform.isIOS) {
-      return _compactCategoryGrid([
-        _scopeCategoryTile(Scope.videos, Icons.play_circle_outline),
-        _scopeCategoryTile(Scope.screenshots, Icons.screenshot_outlined),
-        _scopeCategoryTile(Scope.selfies, Icons.face_outlined),
-        _scopeCategoryTile(Scope.live, Icons.motion_photos_on_outlined),
-        _similarCategoryTile(),
-      ]);
+      const categories = [
+        (Scope.videos, Icons.play_circle_outline),
+        (Scope.screenshots, Icons.screenshot_outlined),
+        (Scope.selfies, Icons.face_outlined),
+        (Scope.live, Icons.motion_photos_on_outlined),
+      ];
+      return FutureBuilder<List<int>>(
+        future: localCategoryCounts,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 28),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final counts = snapshot.data!;
+          return _compactCategoryGrid([
+            for (var index = 0; index < categories.length; index++)
+              if (counts[index] > 0)
+                _compactCategoryTile(
+                  key: ValueKey('category-${categories[index].$1.key}'),
+                  icon: categories[index].$2,
+                  label: categories[index].$1.label,
+                  count: counts[index],
+                  onTap: () => _open(ScopeScreen(app, categories[index].$1)),
+                ),
+            _similarCategoryTile(),
+          ]);
+        },
+      );
     }
     return FutureBuilder<List<SystemCategorySummary>>(
       future: systemCategories,
@@ -1951,22 +1974,194 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 }
 
-class _SlantedCoverClipper extends CustomClipper<Path> {
-  const _SlantedCoverClipper({this.topLeft = 0, this.bottomRight = 0});
+class _DragSelectableGrid extends StatefulWidget {
+  const _DragSelectableGrid({
+    required this.gridKey,
+    required this.controller,
+    required this.padding,
+    required this.crossAxisCount,
+    required this.itemCount,
+    required this.itemBuilder,
+    required this.enabled,
+    required this.busy,
+    required this.isSelected,
+    required this.onSelectionChanged,
+  });
 
-  final double topLeft;
-  final double bottomRight;
+  final Key gridKey;
+  final ScrollController controller;
+  final EdgeInsets padding;
+  final int crossAxisCount;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+  final bool enabled;
+  final bool busy;
+  final bool Function(int index) isSelected;
+  final ValueChanged<Set<int>> onSelectionChanged;
 
   @override
-  Path getClip(Size size) => Path()
-    ..moveTo(topLeft, 0)
-    ..lineTo(size.width, 0)
-    ..lineTo(size.width - bottomRight, size.height)
-    ..lineTo(0, size.height)
-    ..close();
+  State<_DragSelectableGrid> createState() => _DragSelectableGridState();
+}
+
+class _DragSelectableGridState extends State<_DragSelectableGrid> {
+  final surfaceKey = GlobalKey();
+  int? pointer;
+  int? startIndex;
+  Offset? startPosition;
+  Set<int> selectionBase = {};
+  bool dragActive = false;
+  bool dragValue = true;
+  Timer? autoScrollTimer;
+  Offset? dragPosition;
 
   @override
-  bool shouldReclip(covariant _SlantedCoverClipper oldClipper) => false;
+  void didUpdateWidget(covariant _DragSelectableGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled || widget.busy) _resetDrag();
+  }
+
+  @override
+  void dispose() {
+    autoScrollTimer?.cancel();
+    super.dispose();
+  }
+
+  int? _indexAt(Offset globalPosition) {
+    final box = surfaceKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    final local = box.globalToLocal(globalPosition);
+    final usableWidth = box.size.width - widget.padding.horizontal;
+    const spacing = 4.0;
+    final extent =
+        (usableWidth - spacing * (widget.crossAxisCount - 1)) /
+        widget.crossAxisCount;
+    final stride = extent + spacing;
+    final x = local.dx - widget.padding.left;
+    if (x < 0 || x >= usableWidth) return null;
+    final column = (x / stride).floor();
+    if (column >= widget.crossAxisCount || x - column * stride > extent) {
+      return null;
+    }
+    final y = local.dy + widget.controller.offset - widget.padding.top;
+    if (y < 0) return null;
+    final row = (y / stride).floor();
+    if (y - row * stride > extent) return null;
+    final index = row * widget.crossAxisCount + column;
+    return index < widget.itemCount ? index : null;
+  }
+
+  void _pointerDown(PointerDownEvent event) {
+    if (!widget.enabled || widget.busy) return;
+    final index = _indexAt(event.position);
+    if (index == null) return;
+    pointer = event.pointer;
+    startIndex = index;
+    startPosition = event.position;
+    selectionBase = {
+      for (var item = 0; item < widget.itemCount; item++)
+        if (widget.isSelected(item)) item,
+    };
+    dragActive = false;
+    dragPosition = null;
+  }
+
+  void _applySelection(Offset position) {
+    final start = startIndex;
+    final target = _indexAt(position);
+    if (start == null || target == null) return;
+    final next = Set<int>.of(selectionBase);
+    final first = start < target ? start : target;
+    final last = start > target ? start : target;
+    for (var index = first; index <= last; index++) {
+      dragValue ? next.add(index) : next.remove(index);
+    }
+    widget.onSelectionChanged(next);
+  }
+
+  void _startAutoScroll() {
+    autoScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
+      final position = dragPosition;
+      final box = surfaceKey.currentContext?.findRenderObject() as RenderBox?;
+      if (!dragActive ||
+          position == null ||
+          box == null ||
+          !box.hasSize ||
+          !widget.controller.hasClients) {
+        return;
+      }
+      final local = box.globalToLocal(position);
+      const edge = 72.0;
+      double delta = 0;
+      if (local.dy < edge) {
+        delta = -((edge - local.dy) / edge * 14).clamp(3, 14).toDouble();
+      } else if (local.dy > box.size.height - edge) {
+        delta = ((local.dy - (box.size.height - edge)) / edge * 14)
+            .clamp(3, 14)
+            .toDouble();
+      }
+      if (delta == 0) return;
+      final next = (widget.controller.offset + delta)
+          .clamp(
+            widget.controller.position.minScrollExtent,
+            widget.controller.position.maxScrollExtent,
+          )
+          .toDouble();
+      if (next == widget.controller.offset) return;
+      widget.controller.jumpTo(next);
+      _applySelection(position);
+    });
+  }
+
+  void _pointerMove(PointerMoveEvent event) {
+    final origin = startPosition;
+    final start = startIndex;
+    if (event.pointer != pointer || origin == null || start == null) return;
+    if (!dragActive && (event.position - origin).distance < 6) return;
+    if (!dragActive) {
+      dragActive = true;
+      dragValue = !selectionBase.contains(start);
+      _startAutoScroll();
+    }
+    dragPosition = event.position;
+    _applySelection(event.position);
+  }
+
+  void _pointerEnd(PointerEvent event) {
+    if (event.pointer != pointer) return;
+    _resetDrag();
+  }
+
+  void _resetDrag() {
+    pointer = null;
+    startIndex = null;
+    startPosition = null;
+    dragActive = false;
+    dragPosition = null;
+    autoScrollTimer?.cancel();
+    autoScrollTimer = null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    key: surfaceKey,
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: widget.enabled ? _pointerDown : null,
+    onPointerMove: widget.enabled ? _pointerMove : null,
+    onPointerUp: widget.enabled ? _pointerEnd : null,
+    onPointerCancel: widget.enabled ? _pointerEnd : null,
+    child: GridView.builder(
+      key: widget.gridKey,
+      controller: widget.controller,
+      padding: widget.padding,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: widget.crossAxisCount,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemCount: widget.itemCount,
+      itemBuilder: widget.itemBuilder,
+    ),
+  );
 }
 
 class SystemAlbumScreen extends StatefulWidget {
@@ -1981,6 +2176,7 @@ class SystemAlbumScreen extends StatefulWidget {
 }
 
 class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
+  final gridController = ScrollController();
   List<MediaRecord>? records;
   final selected = <String, MediaRecord>{};
   int loaded = 0;
@@ -2064,6 +2260,24 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
         : selected[item.id] = item;
   });
 
+  void _updateSelectedIndexes(Set<int> indexes) {
+    final items = records;
+    if (items == null) return;
+    setState(() {
+      selected
+        ..clear()
+        ..addEntries(
+          indexes.map((index) => MapEntry(items[index].id, items[index])),
+        );
+    });
+  }
+
+  @override
+  void dispose() {
+    gridController.dispose();
+    super.dispose();
+  }
+
   Future<void> _queueSelected() async {
     if (queueing || selected.isEmpty) return;
     setState(() => queueing = true);
@@ -2143,17 +2357,18 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
         else if (records!.isEmpty)
           const Center(child: Text('这个相册没有可访问的媒体'))
         else
-          GridView.builder(
-            key: const Key('album-media-grid'),
+          _DragSelectableGrid(
+            gridKey: const Key('album-media-grid'),
+            controller: gridController,
             padding: EdgeInsets.fromLTRB(4, 6, 4, selecting ? 82 : 16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: _photoGridColumnCount(
-                MediaQuery.sizeOf(context).width,
-              ),
-              crossAxisSpacing: 4,
-              mainAxisSpacing: 4,
+            crossAxisCount: _photoGridColumnCount(
+              MediaQuery.sizeOf(context).width,
             ),
             itemCount: records!.length,
+            enabled: selecting,
+            busy: queueing,
+            isSelected: (index) => selected.containsKey(records![index].id),
+            onSelectionChanged: _updateSelectedIndexes,
             itemBuilder: (context, index) {
               final item = records![index];
               final isSelected = selected.containsKey(item.id);
@@ -2407,11 +2622,13 @@ enum _LibraryTimeMode { year, month, all }
 class _ScopeScreenState extends State<ScopeScreen> {
   final ScrollController gridController = ScrollController();
   final selected = <String, MediaRecord>{};
+  List<MediaRecord>? selectionItems;
   bool pendingOnly = false;
   bool reviewStarted = false;
   bool libraryMenuExpanded = true;
   bool showingAlbums = false;
   bool selecting = false;
+  bool selectionLoading = false;
   bool queueing = false;
   _LibraryTimeMode libraryTimeMode = _LibraryTimeMode.all;
   int count = 0;
@@ -2503,10 +2720,25 @@ class _ScopeScreenState extends State<ScopeScreen> {
     await _refresh(focusId: focusId);
   }
 
-  void _toggleSelecting() => setState(() {
-    selecting = !selecting;
-    selected.clear();
-  });
+  Future<void> _toggleSelecting() async {
+    if (selecting) {
+      setState(_leaveSelection);
+      return;
+    }
+    if (selectionLoading) return;
+    setState(() => selectionLoading = true);
+    final items = await widget.app.store.list(
+      widget.scope,
+      pendingOnly: pendingOnly,
+    );
+    if (!mounted) return;
+    setState(() {
+      selectionItems = items;
+      selecting = true;
+      selectionLoading = false;
+      selected.clear();
+    });
+  }
 
   void _toggleSelected(MediaRecord item) => setState(() {
     selected.containsKey(item.id)
@@ -2516,7 +2748,20 @@ class _ScopeScreenState extends State<ScopeScreen> {
 
   void _leaveSelection() {
     selecting = false;
+    selectionItems = null;
     selected.clear();
+  }
+
+  void _updateSelectedIndexes(Set<int> indexes) {
+    final items = selectionItems;
+    if (items == null) return;
+    setState(() {
+      selected
+        ..clear()
+        ..addEntries(
+          indexes.map((index) => MapEntry(items[index].id, items[index])),
+        );
+    });
   }
 
   Future<void> _queueSelected() async {
@@ -2618,112 +2863,122 @@ class _ScopeScreenState extends State<ScopeScreen> {
     );
   }
 
-  Widget _mediaGrid() => count == 0
-      ? const Center(child: Text('这里还没有可浏览的媒体'))
-      : NotificationListener<ScrollNotification>(
-          onNotification: _handleScroll,
-          child: GridView.builder(
-            key: const Key('scope-media-grid'),
-            controller: gridController,
-            padding: EdgeInsets.fromLTRB(
-              4,
-              6,
-              4,
-              selecting
-                  ? 82
-                  : widget.scope.key == Scope.all.key && !pendingOnly
-                  ? 116
-                  : 16,
-            ),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: _photoGridColumnCount(
-                MediaQuery.sizeOf(context).width,
+  Widget _scopeMediaTile(MediaRecord item, int index) {
+    final isSelected = selected.containsKey(item.id);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        key: ValueKey('scope-media-${item.id}'),
+        onTap: selecting ? () => _toggleSelected(item) : () => _open(index),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            MediaThumb(widget.app.media, item.id),
+            if (item.live)
+              Positioned(
+                key: ValueKey('live-photo-marker-${item.id}'),
+                left: 6,
+                top: 6,
+                child: const _LivePhotoBadge(),
               ),
-              crossAxisSpacing: 4,
-              mainAxisSpacing: 4,
-            ),
-            itemCount: count,
-            itemBuilder: (context, index) => FutureBuilder<MediaRecord?>(
-              future: widget.app.store.at(
-                widget.scope,
-                index,
-                pendingOnly: pendingOnly,
+            if (item.type == 2)
+              Positioned(
+                right: 7,
+                bottom: 7,
+                child: _VideoDurationBadge(item.duration),
               ),
-              builder: (context, snapshot) {
-                final item = snapshot.data;
-                if (item == null) {
-                  return const ColoredBox(color: Color(0xFFE7ECEB));
-                }
-                final isSelected = selected.containsKey(item.id);
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    key: ValueKey('scope-media-${item.id}'),
-                    onTap: selecting
-                        ? () => _toggleSelected(item)
-                        : () => _open(index),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        MediaThumb(widget.app.media, item.id),
-                        if (item.live)
-                          Positioned(
-                            key: ValueKey('live-photo-marker-${item.id}'),
-                            left: 6,
-                            top: 6,
-                            child: const _LivePhotoBadge(),
-                          ),
-                        if (item.type == 2) ...[
-                          Positioned(
-                            right: 7,
-                            bottom: 7,
-                            child: _VideoDurationBadge(item.duration),
-                          ),
-                        ],
-                        if (selecting) ...[
-                          Positioned(
-                            right: 6,
-                            top: 6,
-                            child: _SelectionMarker(selected: isSelected),
-                          ),
-                          if (isSelected)
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: const Color(0xFF1557F8),
-                                      width: 3,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                        if (focusedIndex == index)
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: DecoratedBox(
-                                key: Key('focused-scope-item-$index'),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: const Color(0xFFE9A23B),
-                                    width: 3,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+            if (selecting) ...[
+              Positioned(
+                right: 6,
+                top: 6,
+                child: _SelectionMarker(selected: isSelected),
+              ),
+              if (isSelected)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF1557F8),
+                          width: 3,
+                        ),
+                      ),
                     ),
                   ),
-                );
-              },
+                ),
+            ],
+            if (focusedIndex == index)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    key: Key('focused-scope-item-$index'),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFFE9A23B),
+                        width: 3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mediaGrid() {
+    if (count == 0) {
+      return const Center(child: Text('这里还没有可浏览的媒体'));
+    }
+    final items = selectionItems;
+    final itemCount = selecting && items != null ? items.length : count;
+    final padding = EdgeInsets.fromLTRB(
+      4,
+      6,
+      4,
+      selecting
+          ? 82
+          : widget.scope.key == Scope.all.key && !pendingOnly
+          ? 116
+          : 16,
+    );
+    return NotificationListener<ScrollNotification>(
+      onNotification: _handleScroll,
+      child: _DragSelectableGrid(
+        gridKey: const Key('scope-media-grid'),
+        controller: gridController,
+        padding: padding,
+        crossAxisCount: _photoGridColumnCount(MediaQuery.sizeOf(context).width),
+        itemCount: itemCount,
+        enabled: selecting && items != null,
+        busy: queueing,
+        isSelected: (index) =>
+            items != null && selected.containsKey(items[index].id),
+        onSelectionChanged: _updateSelectedIndexes,
+        itemBuilder: (context, index) {
+          if (selecting && items != null) {
+            return _scopeMediaTile(items[index], index);
+          }
+          return FutureBuilder<MediaRecord?>(
+            future: widget.app.store.at(
+              widget.scope,
+              index,
+              pendingOnly: pendingOnly,
             ),
-          ),
-        );
+            builder: (context, snapshot) {
+              final item = snapshot.data;
+              return item == null
+                  ? const ColoredBox(color: Color(0xFFE7ECEB))
+                  : _scopeMediaTile(item, index);
+            },
+          );
+        },
+      ),
+    );
+  }
 
   Widget _content() {
     if (showingAlbums) return _LibraryAlbumsView(widget.app);
@@ -2839,7 +3094,9 @@ class _ScopeScreenState extends State<ScopeScreen> {
         if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
           _HeaderSelectButton(
             selecting: selecting,
-            onPressed: count == 0 || queueing ? null : _toggleSelecting,
+            onPressed: count == 0 || queueing || selectionLoading
+                ? null
+                : _toggleSelecting,
           ),
       ],
     ),

@@ -226,8 +226,6 @@ final result: passed
 
 final result: passed with iOS Live Photo device check pending
 
----
-
 # v0.1.30 待删除队列操作验收
 
 ## 真机证据
@@ -289,3 +287,37 @@ final result: passed with iOS device check pending
 - 真机交互：进入全部照片及 Screenshots 相册、切换选择态、选择两项、取消选择均通过；验收没有执行“加入待删除”或真实删除。
 
 final result: passed with iOS Live Photo device check pending
+
+---
+
+# v0.1.32 六图首页、真实分类与拖动多选验收
+
+## 对照对象
+
+- source visual truth：用户确认的六图 Bento 方案，以及按“顶部必须 100% 透明”修订的 `exec-ea9b9185-6d95-4e96-b433-de82d18f1482.png`，`840 x 1862`。
+- implementation：`ui-preview/release-v0.1.32-home-final.png`，华为 MED-AL00、Android 10、真实相册数据，`720 x 1600`。
+- side-by-side：`ui-preview/v0.1.32-design-qa-comparison-final.png`；按同高比例对照层级、卡片比例、图片分区、渐变和分类数据，不替换真机媒体。
+
+## Findings
+
+- 无 P0/P1/P2 遗留问题。
+- “全部照片与视频”使用 6 张最近可访问媒体：上排一张主图加一张副图，下排四图；卡片比例约 `1.05:1`，与确认稿的纵向节奏一致。
+- 信息区背景底部为纯白，向上连续过渡，渐变顶部白色 alpha 为 `0`；复杂真机缩略图上标题、数量和入口仍清楚。
+- Android 分类来自本机已索引媒体数量，只显示非零的“视频 9 / 截屏 24”；不存在的自拍和实况没有生成空卡片。确认稿中的两个 0 数量卡片因此按用户后续要求移除。
+- 相似照片尾部显示实际进入相似组的照片总数 `17`，不再显示“分析”。
+- 全部媒体与系统相册详情均可从起始项连续拖动多选；从已选项起拖动同一区间可连续反选；触边拖动会自动滚动。真机验证选中 3 项后沿相同区间拖动恢复到 0 项，再取消选择，没有点击“加入待删除”，也没有改动或删除媒体。
+
+## Comparison history
+
+1. Pass 1：沿用旧版 `4:3` 卡片和较高信息层，第二排四图被压缩，记为 P2。
+2. 修正：仅将卡片比例改为 `1.05`、上下排分界改为 `44%`、渐变高度恢复为 `72dp`。
+3. Pass 2：`ui-preview/release-v0.1.32-home-final.png` 与最终并排图确认，六图比例、第二排可见面积和分类区起始位置均与确认稿一致。
+
+## Verification
+
+- `flutter analyze`：通过，无问题。
+- `flutter test`：57/57 通过；覆盖六图布局、渐变端点、Android 空分类隐藏、相似照片数量、两类照片网格拖选/反选和触边自动滚动。
+- Android release：ARM32/ARM64 构建成功，APK v2 签名校验通过，真机覆盖安装成功。
+- 真机版本：`versionName=0.1.32`，`versionCode=33`，应用标签“相册删除”。
+
+final result: passed

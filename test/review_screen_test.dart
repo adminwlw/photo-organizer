@@ -24,6 +24,12 @@ class FakeMediaRepository extends MediaRepository {
   Future<List<SystemCategorySummary>> systemCategories() async => const [];
 
   @override
+  Future<List<SimilarPhotoGroup>> findSimilarPhotos(
+    AppStore store,
+    void Function(int, int) onProgress,
+  ) async => const [];
+
+  @override
   Future<AssetEntity?> get(String id) async =>
       AssetEntity(id: id, typeInt: AssetType.image.index, width: 1, height: 1);
 
@@ -182,6 +188,62 @@ class ScopeAppStore extends UndoAppStore {
     bool pendingOnly = false,
     bool unreviewedOnly = false,
   }) async => items.indexWhere((item) => item.id == mediaId);
+}
+
+class SixMediaAppStore extends ScopeAppStore {
+  SixMediaAppStore(super.db);
+
+  static const media = [
+    photo,
+    nextPhoto,
+    thirdPhoto,
+    fourthPhoto,
+    fifthPhoto,
+    sixthPhoto,
+  ];
+
+  @override
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => media.length;
+
+  @override
+  Future<MediaRecord?> at(
+    Scope scope,
+    int index, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => index >= 0 && index < media.length ? media[index] : null;
+
+  @override
+  Future<List<MediaRecord>> list(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => media;
+}
+
+class CategoryCountAppStore extends ScopeAppStore {
+  CategoryCountAppStore(super.db);
+
+  @override
+  Future<int> count(
+    Scope scope, {
+    bool pendingOnly = false,
+    bool unreviewedOnly = false,
+  }) async => switch (scope.key) {
+    'category:video' => 1,
+    'category:screenshot' => 2,
+    'category:selfie' => 0,
+    'category:live' => 0,
+    _ => super.count(
+      scope,
+      pendingOnly: pendingOnly,
+      unreviewedOnly: unreviewedOnly,
+    ),
+  };
 }
 
 class ProgressScopeAppStore extends ScopeAppStore {
@@ -401,6 +463,39 @@ const nextPhoto = MediaRecord(
 const thirdPhoto = MediaRecord(
   id: 'third-photo',
   takenAt: 800,
+  month: '2026-10',
+  type: 1,
+  duration: 0,
+  screenshot: false,
+  selfie: false,
+  live: false,
+);
+
+const fourthPhoto = MediaRecord(
+  id: 'fourth-photo',
+  takenAt: 700,
+  month: '2026-10',
+  type: 1,
+  duration: 0,
+  screenshot: false,
+  selfie: false,
+  live: false,
+);
+
+const fifthPhoto = MediaRecord(
+  id: 'fifth-photo',
+  takenAt: 600,
+  month: '2026-10',
+  type: 1,
+  duration: 0,
+  screenshot: false,
+  selfie: false,
+  live: false,
+);
+
+const sixthPhoto = MediaRecord(
+  id: 'sixth-photo',
+  takenAt: 500,
   month: '2026-10',
   type: 1,
   duration: 0,
@@ -1194,7 +1289,7 @@ void main() {
     );
     expect(
       allMediaSize.width / allMediaSize.height,
-      moreOrLessEquals(4 / 3, epsilon: 0.01),
+      moreOrLessEquals(1.05, epsilon: 0.01),
     );
     expect(
       tester.getSize(find.byKey(const Key('review-hero'))).height,
@@ -1205,6 +1300,7 @@ void main() {
     );
     final gradient = (allMediaGradient.decoration as BoxDecoration).gradient!;
     expect((gradient as LinearGradient).colors.first.a, 0);
+    expect(gradient.colors.last.a, 1);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
     expect(find.byKey(const ValueKey('all-media-cover-video')), findsOneWidget);
     expect(
@@ -1234,6 +1330,7 @@ void main() {
       find.byKey(const Key('category-grid')),
       300,
     );
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('category-grid')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('category-category:video')),
@@ -1259,6 +1356,75 @@ void main() {
     expect(find.text('Camera'), findsOneWidget);
     expect(find.text('QQ'), findsOneWidget);
     expect(find.text('Download'), findsOneWidget);
+  });
+
+  testWidgets('all media cover uses the selected six-photo bento layout', (
+    tester,
+  ) async {
+    final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+
+    for (final item in SixMediaAppStore.media) {
+      expect(
+        find.byKey(ValueKey('all-media-cover-${item.id}')),
+        findsOneWidget,
+      );
+    }
+    final large = tester.getRect(
+      find.byKey(const ValueKey('all-media-cover-cell-0')),
+    );
+    final upperRight = tester.getRect(
+      find.byKey(const ValueKey('all-media-cover-cell-1')),
+    );
+    final lowerLeft = tester.getRect(
+      find.byKey(const ValueKey('all-media-cover-cell-2')),
+    );
+    final lowerRight = tester.getRect(
+      find.byKey(const ValueKey('all-media-cover-cell-5')),
+    );
+    expect(large.width, greaterThan(upperRight.width));
+    expect(lowerLeft.top, greaterThan(large.top));
+    expect(lowerLeft.width, moreOrLessEquals(lowerRight.width, epsilon: 0.1));
+  });
+
+  testWidgets('home hides empty Android categories and shows similar count', (
+    tester,
+  ) async {
+    final app = CleanerState(
+      CategoryCountAppStore(database),
+      SimilarMediaRepository(),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('category-grid')),
+      300,
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('category-category:video')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('category-category:screenshot')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('category-category:selfie')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('category-category:live')), findsNothing);
+    final similar = find.byKey(const ValueKey('category-similar'));
+    expect(
+      find.descendant(of: similar, matching: find.text('2')),
+      findsOneWidget,
+    );
+    expect(find.text('分析'), findsNothing);
   });
 
   testWidgets('photo grids adapt from three to eight columns', (tester) async {
@@ -1349,6 +1515,64 @@ void main() {
     expect(store.actions, [ReviewAction.delete, ReviewAction.delete]);
   });
 
+  testWidgets('all media drag selects and deselects a range', (tester) async {
+    final app = CleanerState(ScopeAppStore(database), FakeMediaRepository());
+    await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pumpAndSettle();
+
+    final first = find.byKey(const ValueKey('scope-media-photo'));
+    final second = find.byKey(const ValueKey('scope-media-next-photo'));
+    var gesture = await tester.startGesture(tester.getCenter(first));
+    await gesture.moveTo(tester.getCenter(second));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('已选择 2 项'), findsOneWidget);
+
+    gesture = await tester.startGesture(tester.getCenter(first));
+    await gesture.moveTo(tester.getCenter(second));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('已选择 0 项'), findsOneWidget);
+  });
+
+  testWidgets('all media drag selection auto-scrolls at the grid edge', (
+    tester,
+  ) async {
+    final store = LongScopeAppStore(database, initialAnchor: 'photo-0');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ScopeScreen(
+          CleanerState(store, FakeMediaRepository()),
+          Scope.all,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pumpAndSettle();
+
+    final gridFinder = find.byKey(const Key('scope-media-grid'));
+    final grid = tester.widget<GridView>(gridFinder);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('scope-media-photo-0'))),
+    );
+    await gesture.moveTo(
+      Offset(
+        tester.getCenter(gridFinder).dx,
+        tester.getBottomLeft(gridFinder).dy - 8,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(grid.controller!.offset, greaterThan(0));
+    await gesture.up();
+    await tester.pump();
+  });
+
   testWidgets('album detail shows live badge and queues selected items', (
     tester,
   ) async {
@@ -1386,6 +1610,45 @@ void main() {
     expect(find.text('已将 2 项加入待删除队列，可在队列中复核。'), findsOneWidget);
     expect(store.actions, [ReviewAction.delete, ReviewAction.delete]);
     expect(find.text('0 个项目'), findsOneWidget);
+  });
+
+  testWidgets('album detail drag selects and deselects a range', (
+    tester,
+  ) async {
+    final media = AlbumDetailMediaRepository();
+    final album = SystemAlbumSummary(
+      path: AssetPathEntity(id: 'camera', name: '由我拍摄'),
+      count: 2,
+      coverId: 'photo',
+      group: SystemAlbumGroup.album,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SystemAlbumScreen(
+          CleanerState(UndoAppStore(database), media),
+          album,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pump();
+
+    final first = find.byKey(const ValueKey('album-media-photo'));
+    final second = find.byKey(const ValueKey('album-media-live-photo'));
+    var gesture = await tester.startGesture(tester.getCenter(first));
+    await gesture.moveTo(tester.getCenter(second));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('已选择 2 项'), findsOneWidget);
+
+    gesture = await tester.startGesture(tester.getCenter(first));
+    await gesture.moveTo(tester.getCenter(second));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('已选择 0 项'), findsOneWidget);
   });
 
   testWidgets('similar photo groups open the existing review screen', (
