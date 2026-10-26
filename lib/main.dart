@@ -566,108 +566,152 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final pages = const [
-    ('一张张整理相册', '只浏览你允许访问的照片和视频，随时可以停下。', Icons.photo_library_outlined),
-    ('左右切换', '左滑上一张，右滑下一张；浏览本身不做决定。', Icons.swipe_outlined),
-    ('先标记，再复核', '上滑只加入待删除队列，不会立即删除系统照片。', Icons.swipe_up_outlined),
-    ('认真复核', '从队列移出误选照片，确认后才请求系统处理。', Icons.fact_check_outlined),
-    ('授权访问照片', '可以允许全部或部分照片；只处理当前授权范围。', Icons.lock_outline),
+  static const pages = [
+    'assets/tutorial/tutorial-01.png',
+    'assets/tutorial/tutorial-02.png',
+    'assets/tutorial/tutorial-03.png',
+    'assets/tutorial/tutorial-04.png',
   ];
   final PageController pager = PageController();
+  Timer? playbackTimer;
   int page = 0;
   bool busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    _schedulePlayback();
+  }
+
+  void _schedulePlayback() {
+    playbackTimer?.cancel();
+    if (page == pages.length - 1) return;
+    playbackTimer = Timer(const Duration(milliseconds: 2800), () {
+      if (!mounted || !pager.hasClients || busy) return;
+      pager.nextPage(
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  String _pageLabel(int index) => switch (index) {
+    0 => '左右滑动预览照片，左滑下一张，右滑上一张',
+    1 => '上滑删除不想保留的照片，并自动进入下一张',
+    2 => '下滑动作可以设置为无、待定或返回相册，当前为${widget.downAction.label}',
+    _ => '左右预览，上滑删除，下滑动作可以自定义',
+  };
+
+  @override
   void dispose() {
+    playbackTimer?.cancel();
     pager.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    final action = widget.downAction.label;
-    return Scaffold(
-      appBar: AppBar(title: const Text('使用说明')),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView.builder(
-                controller: pager,
-                itemCount: pages.length,
-                onPageChanged: (value) => setState(() => page = value),
-                itemBuilder: (context, index) {
-                  final (title, body, icon) = pages[index];
-                  return Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          icon,
-                          size: 96,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(height: 32),
-                        Text(
-                          title,
-                          style: Theme.of(context).textTheme.headlineMedium,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 18),
-                        Text(
-                          index == 2 ? '$body\n下滑当前为“$action”，可在设置中更改。' : body,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  );
-                },
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFFF5F8FD),
+    appBar: Navigator.canPop(context)
+        ? AppBar(
+            title: const Text('使用教程'),
+            backgroundColor: const Color(0xFFF5F8FD),
+          )
+        : null,
+    body: SafeArea(
+      child: Column(
+        children: [
+          Expanded(
+            child: PageView.builder(
+              key: const Key('onboarding-pager'),
+              controller: pager,
+              itemCount: pages.length,
+              onPageChanged: (value) {
+                setState(() => page = value);
+                _schedulePlayback();
+              },
+              itemBuilder: (context, index) => Semantics(
+                label: _pageLabel(index),
+                image: true,
+                child: Image.asset(
+                  pages[index],
+                  key: ValueKey('onboarding-page-${index + 1}'),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                ),
               ),
             ),
-            Text('${page + 1} / ${pages.length}'),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  if (page > 0)
-                    TextButton(
-                      onPressed: () => pager.previousPage(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+            child: Row(
+              children: [
+                Row(
+                  children: List.generate(
+                    pages.length,
+                    (index) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: index == page ? 28 : 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 7),
+                      decoration: BoxDecoration(
+                        color: index == page
+                            ? const Color(0xFF175CF5)
+                            : const Color(0xFFC8D2DF),
+                        borderRadius: BorderRadius.circular(99),
                       ),
-                      child: const Text('上一页'),
                     ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            if (page < pages.length - 1) {
-                              pager.nextPage(
-                                duration: const Duration(milliseconds: 250),
-                                curve: Curves.easeOut,
-                              );
-                            } else {
-                              setState(() => busy = true);
-                              try {
-                                await widget.onDone();
-                              } finally {
-                                if (mounted) setState(() => busy = false);
-                              }
-                            }
-                          },
-                    child: Text(page == pages.length - 1 ? '开始并授权' : '下一页'),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${page + 1} / ${pages.length}',
+                  key: const Key('onboarding-page-indicator'),
+                  style: const TextStyle(
+                    color: Color(0xFF667085),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                if (page > 0)
+                  IconButton(
+                    key: const Key('onboarding-previous'),
+                    tooltip: '上一页',
+                    onPressed: () => pager.previousPage(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                    ),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                FilledButton(
+                  key: const Key('onboarding-next'),
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          if (page < pages.length - 1) {
+                            pager.nextPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOutCubic,
+                            );
+                          } else {
+                            playbackTimer?.cancel();
+                            setState(() => busy = true);
+                            try {
+                              await widget.onDone();
+                            } finally {
+                              if (mounted) setState(() => busy = false);
+                            }
+                          }
+                        },
+                  child: Text(page == pages.length - 1 ? '开始清理' : '下一页'),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class PermissionScreen extends StatelessWidget {

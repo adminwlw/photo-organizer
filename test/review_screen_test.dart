@@ -562,6 +562,43 @@ void main() {
 
   tearDownAll(() => database.close());
 
+  testWidgets('the first-run tutorial auto-plays four swipe pages', (
+    tester,
+  ) async {
+    var completed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingScreen(
+          downAction: DownSwipeAction.pending,
+          onDone: () async => completed++,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('1 / 4'), findsOneWidget);
+    expect(find.byKey(const ValueKey('onboarding-page-1')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2800));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('2 / 4'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 4'), findsOneWidget);
+    expect(find.bySemanticsLabel('下滑动作可以设置为无、待定或返回相册，当前为待定'), findsOneWidget);
+    expect(completed, 0);
+
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('4 / 4'), findsOneWidget);
+    expect(find.text('开始清理'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pump();
+    expect(completed, 1);
+  });
+
   testWidgets('the active video preview starts playback automatically', (
     tester,
   ) async {
