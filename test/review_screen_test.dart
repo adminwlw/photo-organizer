@@ -1332,7 +1332,7 @@ void main() {
     expect(find.text('本范围已整理完成'), findsNothing);
   });
 
-  testWidgets('home categories include all media and albums use a grid', (
+  testWidgets('home follows the selected hero and stacked category layout', (
     tester,
   ) async {
     final app = CleanerState(
@@ -1344,25 +1344,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-brand')), findsOneWidget);
     expect(find.byKey(const Key('home-brand-logo')), findsOneWidget);
+    expect(find.byKey(const Key('home-settings')), findsOneWidget);
     expect(find.text('相册删除'), findsOneWidget);
+    expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
     final allMediaSize = tester.getSize(
       find.byKey(const ValueKey('category-all')),
     );
-    expect(
-      allMediaSize.width / allMediaSize.height,
-      moreOrLessEquals(1.05, epsilon: 0.01),
-    );
+    expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
+    expect(allMediaSize.height, inInclusiveRange(150, 180));
     expect(
       tester.getSize(find.byKey(const Key('review-hero'))).height,
-      lessThanOrEqualTo(100),
+      76,
     );
-    final allMediaGradient = tester.widget<DecoratedBox>(
-      find.byKey(const Key('all-media-title-gradient')),
-    );
-    final gradient = (allMediaGradient.decoration as BoxDecoration).gradient!;
-    expect((gradient as LinearGradient).colors.first.a, 0);
-    expect(gradient.colors.last.a, 1);
+    expect(find.text('整理进度'), findsNothing);
+    expect(find.text('待删除队列'), findsNothing);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
     expect(find.byKey(const ValueKey('all-media-cover-video')), findsOneWidget);
     expect(
@@ -1373,17 +1369,10 @@ void main() {
       find.byKey(const ValueKey('all-media-cover-video-marker-video')),
       findsOneWidget,
     );
-    final homeList = tester.widget<ListView>(find.byType(ListView));
-    final homeChildren =
-        (homeList.childrenDelegate as SliverChildListDelegate).children;
     expect(
-      homeChildren.indexWhere(
-        (child) => child.key == const Key('home-all-media-card'),
-      ),
+      tester.getTopLeft(find.byKey(const Key('home-all-media-card'))).dy,
       lessThan(
-        homeChildren.indexWhere(
-          (child) => child.key == const ValueKey('section-分类整理'),
-        ),
+        tester.getTopLeft(find.byKey(const ValueKey('section-分类整理'))).dy,
       ),
     );
     expect(find.text('全部照片与视频'), findsOneWidget);
@@ -1391,6 +1380,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('category-grid')),
       300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('home-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('category-grid')), findsOneWidget);
@@ -1411,6 +1406,32 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('category-similar')), findsOneWidget);
+    final videoRect = tester.getRect(
+      find.byKey(const ValueKey('category-category:video')),
+    );
+    final screenshotRect = tester.getRect(
+      find.byKey(const ValueKey('category-category:screenshot')),
+    );
+    final selfieRect = tester.getRect(
+      find.byKey(const ValueKey('category-category:selfie')),
+    );
+    final liveRect = tester.getRect(
+      find.byKey(const ValueKey('category-category:live')),
+    );
+    final similarRect = tester.getRect(
+      find.byKey(const ValueKey('category-similar')),
+    );
+    expect(videoRect.top, moreOrLessEquals(screenshotRect.top, epsilon: 0.1));
+    expect(
+      videoRect.width,
+      moreOrLessEquals(screenshotRect.width, epsilon: 0.1),
+    );
+    expect(selfieRect.top, greaterThan(videoRect.bottom));
+    expect(liveRect.top, greaterThan(selfieRect.bottom));
+    expect(similarRect.top, greaterThan(liveRect.bottom));
+    expect(selfieRect.width, greaterThan(videoRect.width * 1.8));
+    expect(liveRect.width, moreOrLessEquals(selfieRect.width, epsilon: 0.1));
+    expect(similarRect.width, moreOrLessEquals(selfieRect.width, epsilon: 0.1));
 
     await tester.tap(find.text('相册'));
     await tester.pumpAndSettle();
@@ -1420,7 +1441,7 @@ void main() {
     expect(find.text('Download'), findsOneWidget);
   });
 
-  testWidgets('all media cover uses the selected six-photo bento layout', (
+  testWidgets('all media cover uses the selected four-photo mosaic', (
     tester,
   ) async {
     final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
@@ -1428,27 +1449,31 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
 
-    for (final item in SixMediaAppStore.media) {
+    for (final item in SixMediaAppStore.media.take(4)) {
       expect(
         find.byKey(ValueKey('all-media-cover-${item.id}')),
         findsOneWidget,
       );
     }
-    final large = tester.getRect(
+    for (final item in SixMediaAppStore.media.skip(4)) {
+      expect(find.byKey(ValueKey('all-media-cover-${item.id}')), findsNothing);
+    }
+    final topLeft = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-0')),
     );
-    final upperRight = tester.getRect(
+    final topRight = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-1')),
     );
-    final lowerLeft = tester.getRect(
+    final bottomLeft = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-2')),
     );
-    final lowerRight = tester.getRect(
-      find.byKey(const ValueKey('all-media-cover-cell-5')),
+    final bottomRight = tester.getRect(
+      find.byKey(const ValueKey('all-media-cover-cell-3')),
     );
-    expect(large.width, greaterThan(upperRight.width));
-    expect(lowerLeft.top, greaterThan(large.top));
-    expect(lowerLeft.width, moreOrLessEquals(lowerRight.width, epsilon: 0.1));
+    expect(topLeft.top, moreOrLessEquals(topRight.top, epsilon: 0.1));
+    expect(bottomLeft.top, greaterThan(topLeft.bottom));
+    expect(bottomLeft.left, moreOrLessEquals(topLeft.left, epsilon: 0.1));
+    expect(bottomRight.left, moreOrLessEquals(topRight.left, epsilon: 0.1));
   });
 
   testWidgets('home hides empty Android categories and shows similar count', (
@@ -1464,6 +1489,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('category-grid')),
       300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('home-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
 
     await tester.pumpAndSettle();
@@ -1483,7 +1514,7 @@ void main() {
     expect(find.byKey(const ValueKey('category-category:live')), findsNothing);
     final similar = find.byKey(const ValueKey('category-similar'));
     expect(
-      find.descendant(of: similar, matching: find.text('2')),
+      find.descendant(of: similar, matching: find.text('2 项')),
       findsOneWidget,
     );
     expect(find.text('分析'), findsNothing);
@@ -1583,6 +1614,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('media-select-button')));
     await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<GridView>(find.byKey(const Key('scope-media-grid')))
+          .physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
 
     final first = find.byKey(const ValueKey('scope-media-photo'));
     final second = find.byKey(const ValueKey('scope-media-next-photo'));
@@ -1787,6 +1825,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('category-similar')),
       300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('home-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('category-similar')));
@@ -2023,7 +2067,7 @@ void main() {
     expect(find.text('回到上次位置'), findsNothing);
     expect(
       tester.getSize(find.byKey(const Key('review-hero'))).height,
-      lessThanOrEqualTo(140),
+      76,
     );
 
     await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
@@ -2069,12 +2113,21 @@ void main() {
     );
 
     final gesture = await tester.startGesture(tester.getCenter(firstSelector));
+    await tester.pump();
+    expect(
+      tester.widget<GridView>(find.byType(GridView)).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
     await gesture.moveTo(
       tester.getCenter(find.byKey(const ValueKey('queue-item-next-photo'))),
     );
     await tester.pump();
     await gesture.up();
     await tester.pump();
+    expect(
+      tester.widget<GridView>(find.byType(GridView)).physics,
+      isNot(isA<NeverScrollableScrollPhysics>()),
+    );
     expect(find.text('保留 2 项'), findsOneWidget);
     expect(find.text('删除 2 项'), findsOneWidget);
 

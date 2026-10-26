@@ -782,7 +782,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<List<MediaRecord>> _loadAllMediaCover() async => (await Future.wait([
-    for (var index = 0; index < 6; index++) app.store.at(Scope.all, index),
+    for (var index = 0; index < 4; index++) app.store.at(Scope.all, index),
   ])).whereType<MediaRecord>().toList();
 
   Future<List<int>> _loadLocalCategoryCounts() => Future.wait([
@@ -848,13 +848,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _sectionTitle(String title, {String? subtitle}) => Padding(
     key: ValueKey('section-$title'),
-    padding: const EdgeInsets.fromLTRB(2, 26, 2, 14),
+    padding: const EdgeInsets.fromLTRB(2, 22, 2, 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
+          style: const TextStyle(
+            color: Color(0xFF111A35),
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         if (subtitle != null)
           Padding(
@@ -872,21 +876,41 @@ class _HomeScreenState extends State<HomeScreen> {
     key: const Key('home-brand'),
     children: [
       ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(13),
         child: Image.asset(
           'assets/app-logo.png',
           key: const Key('home-brand-logo'),
-          width: 44,
-          height: 44,
+          width: 46,
+          height: 46,
         ),
       ),
       const SizedBox(width: 11),
-      const Text(
-        '相册删除',
-        style: TextStyle(
-          color: Color(0xFF10131A),
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
+      const Expanded(
+        child: Text(
+          '相册删除',
+          style: TextStyle(
+            color: Color(0xFF111A35),
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+      Material(
+        color: const Color(0xD9FFFFFF),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          key: const Key('home-settings'),
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _open(SettingsScreen(app)),
+          child: const SizedBox(
+            width: 48,
+            height: 48,
+            child: Icon(
+              Icons.settings_outlined,
+              color: Color(0xFF1557F8),
+              size: 27,
+            ),
+          ),
         ),
       ),
     ],
@@ -1089,50 +1113,218 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  Widget _heroPhoto(MediaRecord? item, {Key? key}) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white, width: 4),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x1A23469A),
+          blurRadius: 16,
+          offset: Offset(0, 7),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: item == null
+          ? const ColoredBox(
+              color: Color(0xFFDCEBFF),
+              child: Icon(
+                Icons.photo_library_outlined,
+                color: Color(0xFF78A7FF),
+              ),
+            )
+          : MediaThumb(app.media, item.id, key: key, width: 240, height: 180),
+    ),
+  );
+
+  Widget _heroIntro() => SizedBox(
+    height: 160,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final artWidth = (constraints.maxWidth * 0.46)
+            .clamp(132.0, 172.0)
+            .toDouble();
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              top: 26,
+              width: constraints.maxWidth - artWidth + 8,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '清理重复和无用照片\n让相册更清爽',
+                    style: TextStyle(
+                      color: Color(0xFF111A35),
+                      fontSize: 17,
+                      height: 1.22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  SizedBox(height: 9),
+                  Text(
+                    '从上次停下的位置继续整理',
+                    style: TextStyle(
+                      color: Color(0xFF6E7892),
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              width: artWidth,
+              height: 152,
+              child: FutureBuilder<List<MediaRecord>>(
+                future: allMediaCover,
+                builder: (context, snapshot) {
+                  final items = snapshot.data ?? const <MediaRecord>[];
+                  MediaRecord? itemAt(int index) =>
+                      index < items.length ? items[index] : null;
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        right: 8,
+                        top: 4,
+                        width: 112,
+                        height: 82,
+                        child: Transform.rotate(
+                          angle: 0.08,
+                          child: _heroPhoto(
+                            itemAt(0),
+                            key: const Key('home-hero-photo-0'),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 38,
+                        top: 60,
+                        width: 108,
+                        height: 80,
+                        child: Transform.rotate(
+                          angle: -0.08,
+                          child: _heroPhoto(
+                            itemAt(1),
+                            key: const Key('home-hero-photo-1'),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -1,
+                        top: 77,
+                        width: 103,
+                        height: 75,
+                        child: Transform.rotate(
+                          angle: 0.1,
+                          child: _heroPhoto(
+                            itemAt(2),
+                            key: const Key('home-hero-photo-2'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
   Widget _reviewHero() => FutureBuilder<ReviewProgress?>(
     future: app.store.reviewProgress(Scope.all),
     builder: (context, progressSnapshot) => FutureBuilder<int>(
       future: app.store.count(Scope.all, unreviewedOnly: true),
       builder: (context, countSnapshot) {
         final progress = progressSnapshot.data;
-        final total = countSnapshot.data ?? progress?.total;
         final hasProgress = progress != null && progress.total > 0;
-        final lastTime = hasProgress
-            ? DateTime.fromMillisecondsSinceEpoch(progress.updatedAt).toLocal()
-            : null;
-        final enabled = total != 0;
+        final available = countSnapshot.data;
+        final total = hasProgress ? progress.total : available;
+        final completed = hasProgress
+            ? (progress.position + 1).clamp(0, progress.total)
+            : 0;
+        final ratio = hasProgress ? completed / progress.total : 0.0;
+        final percent = (ratio * 100).round();
+        final enabled = hasProgress || available != 0;
         return Material(
           color: Colors.transparent,
           child: InkWell(
             key: const Key('review-hero'),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(22),
             onTap: enabled
                 ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
                 : null,
             child: Ink(
-              height: 96,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 76,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF0F4FF),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFDCE5FF)),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF36A7F4),
+                    Color(0xFF3E77F7),
+                    Color(0xFF7565F2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x294663EF),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1557F8),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.photo_library_rounded,
-                      color: Colors.white,
-                      size: 23,
+                  SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 52,
+                          height: 52,
+                          child: CircularProgressIndicator(
+                            value: ratio,
+                            strokeWidth: 4,
+                            backgroundColor: const Color(0x55FFFFFF),
+                            color: Colors.white,
+                          ),
+                        ),
+                        Container(
+                          width: 42,
+                          height: 42,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$percent%',
+                            style: const TextStyle(
+                              color: Color(0xFF1557F8),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 13),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1141,43 +1333,41 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           hasProgress ? '继续整理' : '开始整理',
                           style: const TextStyle(
-                            color: Color(0xFF10131A),
-                            fontSize: 18,
+                            color: Colors.white,
+                            fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 4),
                         Text(
                           hasProgress
-                              ? '上次到第 ${progress.position + 1} / ${progress.total} 项'
-                                    ' · ${lastTime!.month}月${lastTime.day}日'
+                              ? '第 $completed / ${progress.total} 项'
                               : total == null
                               ? '正在读取相册'
                               : '当前可整理 $total 项照片与视频',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFF687086),
+                            color: Color(0xE6FFFFFF),
+                            fontSize: 13,
                             height: 1.3,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
-                      color: enabled
-                          ? const Color(0xFF1557F8)
-                          : const Color(0xFFD8DDE8),
+                      color: enabled ? Colors.white : const Color(0x99FFFFFF),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 20,
+                      color: Color(0xFF3158E6),
+                      size: 24,
                     ),
                   ),
                 ],
@@ -1250,44 +1440,76 @@ class _HomeScreenState extends State<HomeScreen> {
     required int? count,
     required VoidCallback onTap,
     String? countText,
-  }) => InkWell(
-    key: key,
-    borderRadius: BorderRadius.circular(18),
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F6FF),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE1E7F5)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF1557F8), size: 22),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                shadows: _buttonTextShadows,
+    Color accent = const Color(0xFF1557F8),
+    Color surface = const Color(0xFFF3F6FF),
+  }) => SizedBox(
+    height: 72,
+    child: InkWell(
+      key: key,
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accent.withValues(alpha: 0.16)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: accent, size: 21),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF111A35),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    countText ?? (count == null ? '读取中' : '$count 项'),
+                    style: const TextStyle(
+                      color: Color(0xFF6E7892),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            countText ?? (count == null ? '读取中' : '$count'),
-            style: const TextStyle(
-              color: Color(0xFF687086),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              shadows: _buttonTextShadows,
+            const SizedBox(width: 6),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.66),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.arrow_forward_rounded,
+                color: const Color(0xFF193B8F),
+                size: 20,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -1329,72 +1551,25 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _allMediaMosaic(List<MediaRecord> items) {
-    if (items.isEmpty) {
-      return const ColoredBox(
-        color: Color(0xFFF0F4FF),
-        child: Center(
-          child: Icon(
-            Icons.photo_library_outlined,
-            color: Color(0xFFB5C6FF),
-            size: 48,
-          ),
-        ),
-      );
-    }
-    if (items.length == 1) {
-      return MediaThumb(
-        app.media,
-        items.first.id,
-        key: ValueKey('all-media-cover-${items.first.id}'),
-        width: 760,
-        height: 340,
-      );
-    }
-    if (items.length < 6) {
-      return Row(
-        children: [
-          for (var index = 0; index < items.length; index++)
-            Expanded(child: _allMediaCoverCell(items[index], index)),
-        ],
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
-        const gap = 3.0;
-        final upperHeight = height * 0.44;
-        final largeWidth = width * 0.64;
-        final lowerTop = upperHeight + gap;
-        final lowerWidth = (width - gap * 3) / 4;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned(
-              left: 0,
-              width: largeWidth,
-              top: 0,
-              height: upperHeight,
-              child: _allMediaCoverCell(items[0], 0),
-            ),
-            Positioned(
-              left: largeWidth + gap,
-              right: 0,
-              top: 0,
-              height: upperHeight,
-              child: _allMediaCoverCell(items[1], 1),
-            ),
-            for (var index = 0; index < 4; index++)
-              Positioned(
-                left: index * (lowerWidth + gap),
-                width: lowerWidth,
-                top: lowerTop,
-                bottom: 0,
-                child: _allMediaCoverCell(items[index + 2], index + 2),
+    return GridView.builder(
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 4,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemBuilder: (context, index) => index < items.length
+          ? _allMediaCoverCell(items[index], index)
+          : const ColoredBox(
+              color: Color(0xFFEAF2FF),
+              child: Icon(
+                Icons.image_outlined,
+                color: Color(0xFFAAC3F8),
+                size: 24,
               ),
-          ],
-        );
-      },
+            ),
     );
   }
 
@@ -1407,103 +1582,107 @@ class _HomeScreenState extends State<HomeScreen> {
         key: const ValueKey('category-all'),
         borderRadius: BorderRadius.circular(22),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
-        child: AspectRatio(
-          aspectRatio: 1.05,
-          child: Ink(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0F4FF),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFDCE5FF)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(21),
-              child: Stack(
-                fit: StackFit.expand,
+        child: Ink(
+          height: 168,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xEFFFFFFF),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFDCE5F7)),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final coverWidth = (constraints.maxWidth * 0.53)
+                  .clamp(148.0, 226.0)
+                  .toDouble();
+              return Row(
                 children: [
-                  FutureBuilder<List<MediaRecord>>(
-                    future: allMediaCover,
-                    builder: (context, snapshot) =>
-                        _allMediaMosaic(snapshot.data ?? const []),
-                  ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: 72,
-                    child: ClipRect(
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9),
-                        child: DecoratedBox(
-                          key: const Key('all-media-title-gradient'),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.white.withValues(alpha: 0),
-                                Colors.white,
-                              ],
-                            ),
-                          ),
-                        ),
+                  SizedBox(
+                    width: coverWidth,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: FutureBuilder<List<MediaRecord>>(
+                        future: allMediaCover,
+                        builder: (context, snapshot) =>
+                            _allMediaMosaic(snapshot.data ?? const []),
                       ),
                     ),
                   ),
-                  Positioned(
-                    left: 16,
-                    right: 12,
-                    bottom: 13,
-                    child: Row(
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.photo_library_outlined,
-                          color: Color(0xFF1557F8),
-                          size: 25,
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            '全部照片与视频',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Color(0xFF10131A),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              shadows: _buttonTextShadows,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          count.hasData ? '${count.data}' : '读取中',
-                          style: const TextStyle(
-                            color: Color(0xFF687086),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            shadows: _buttonTextShadows,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
                         Container(
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF1557F8),
-                            shape: BoxShape.circle,
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4F1FF),
+                            borderRadius: BorderRadius.circular(13),
                           ),
                           child: const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: Colors.white,
-                            size: 22,
+                            Icons.photo_library_outlined,
+                            color: Color(0xFF4D51EE),
+                            size: 23,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '全部照片与视频',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFF111A35),
+                            fontSize: 16,
+                            height: 1.16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          '完整浏览相册内容',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFF6E7892),
+                            fontSize: 11,
+                          ),
+                        ),
+                        const Spacer(),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                count.hasData ? '${count.data}' : '读取中',
+                                style: const TextStyle(
+                                  color: Color(0xFF245BF0),
+                                  fontSize: 30,
+                                  height: 1,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFF2F5FD),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Color(0xFF245BF0),
+                                size: 21,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -1517,31 +1696,66 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: Icons.auto_awesome_mosaic_outlined,
       label: '相似照片',
       count: snapshot.data,
+      accent: const Color(0xFF119C9A),
+      surface: const Color(0xFFF0FBF8),
       onTap: () => _open(SimilarPhotosScreen(app)),
     ),
   );
 
-  Widget _compactCategoryGrid(List<Widget> children) => GridView.builder(
-    key: const Key('category-grid'),
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    itemCount: children.length,
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: 2,
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      mainAxisExtent: 68,
-    ),
-    itemBuilder: (context, index) => children[index],
-  );
+  Widget _compactCategoryList(List<Widget> children) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    final rows = <Widget>[];
+    var index = 0;
+    if (children.length > 1) {
+      rows.add(
+        Row(
+          children: [
+            Expanded(child: children[0]),
+            const SizedBox(width: 10),
+            Expanded(child: children[1]),
+          ],
+        ),
+      );
+      index = 2;
+    }
+    for (; index < children.length; index++) {
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 10));
+      rows.add(children[index]);
+    }
+    return Column(
+      key: const Key('category-grid'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
+  }
 
   Widget _categoryGrid() {
     if (!Platform.isIOS) {
       const categories = [
-        (Scope.videos, Icons.play_circle_outline),
-        (Scope.screenshots, Icons.screenshot_outlined),
-        (Scope.selfies, Icons.face_outlined),
-        (Scope.live, Icons.motion_photos_on_outlined),
+        (
+          Scope.videos,
+          Icons.videocam_outlined,
+          Color(0xFF078CA6),
+          Color(0xFFF0FBFD),
+        ),
+        (
+          Scope.screenshots,
+          Icons.screenshot_outlined,
+          Color(0xFF6C4BEF),
+          Color(0xFFF7F4FF),
+        ),
+        (
+          Scope.selfies,
+          Icons.face_outlined,
+          Color(0xFFE8863A),
+          Color(0xFFFFF7EF),
+        ),
+        (
+          Scope.live,
+          Icons.motion_photos_on_outlined,
+          Color(0xFF3978DD),
+          Color(0xFFF1F6FF),
+        ),
       ];
       return FutureBuilder<List<int>>(
         future: localCategoryCounts,
@@ -1553,7 +1767,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
           final counts = snapshot.data!;
-          return _compactCategoryGrid([
+          return _compactCategoryList([
             for (var index = 0; index < categories.length; index++)
               if (counts[index] > 0)
                 _compactCategoryTile(
@@ -1561,6 +1775,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: categories[index].$2,
                   label: categories[index].$1.label,
                   count: counts[index],
+                  accent: categories[index].$3,
+                  surface: categories[index].$4,
                   onTap: () => _open(ScopeScreen(app, categories[index].$1)),
                 ),
             _similarCategoryTile(),
@@ -1578,7 +1794,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         final categories = snapshot.data ?? const <SystemCategorySummary>[];
-        return _compactCategoryGrid([
+        return _compactCategoryList([
           ...categories.map(_systemCategoryTile),
           _similarCategoryTile(),
         ]);
@@ -1586,46 +1802,76 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _home() => ListView(
-    padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
+  Widget _homeHeader() => Stack(
     children: [
-      if (app.scanFailed)
-        Card(
-          child: ListTile(
-            title: const Text('相册读取失败'),
-            trailing: TextButton(
-              onPressed: app.refresh,
-              child: const Text('重试'),
-            ),
-          ),
+      Positioned.fill(
+        child: Image.asset(
+          'assets/home-header-background.png',
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          excludeFromSemantics: true,
         ),
-      if (app.permissionState == PermissionState.limited)
-        Card(
-          child: ListTile(
-            title: const Text('当前仅整理已授权的媒体'),
-            trailing: TextButton(
-              onPressed: app.managePermission,
-              child: const Text('扩充范围'),
-            ),
-          ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: Column(
+          children: [
+            _brandHeader(),
+            const SizedBox(height: 12),
+            _heroIntro(),
+            const SizedBox(height: 4),
+            _reviewHero(),
+          ],
         ),
-      _brandHeader(),
-      const SizedBox(height: 14),
-      _reviewHero(),
-      const SizedBox(height: 14),
-      _allMediaCategoryTile(),
-      _sectionTitle('分类整理'),
-      _categoryGrid(),
-      _sectionTitle('整理进度'),
-      _queueCard(),
-      if (Platform.isAndroid)
-        const Padding(
-          padding: EdgeInsets.only(top: 18),
-          child: Text(
-            '自拍和动态照片在 Android 上没有统一的可靠标记，可在“全部”中查看。',
-            style: TextStyle(color: Color(0xFF818895), fontSize: 12),
-          ),
+      ),
+    ],
+  );
+
+  Widget _home() => ListView(
+    key: const Key('home-scroll'),
+    padding: const EdgeInsets.only(bottom: 112),
+    children: [
+      _homeHeader(),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (app.scanFailed)
+              Card(
+                child: ListTile(
+                  title: const Text('相册读取失败'),
+                  trailing: TextButton(
+                    onPressed: app.refresh,
+                    child: const Text('重试'),
+                  ),
+                ),
+              ),
+            if (app.permissionState == PermissionState.limited)
+              Card(
+                child: ListTile(
+                  title: const Text('当前仅整理已授权的媒体'),
+                  trailing: TextButton(
+                    onPressed: app.managePermission,
+                    child: const Text('扩充范围'),
+                  ),
+                ),
+              ),
+            _sectionTitle('照片总览'),
+            _allMediaCategoryTile(),
+            _sectionTitle('分类整理'),
+            _categoryGrid(),
+            if (Platform.isAndroid)
+              const Padding(
+                padding: EdgeInsets.only(top: 18),
+                child: Text(
+                  '自拍和动态照片在 Android 上没有统一的可靠标记，可在“全部”中查看。',
+                  style: TextStyle(color: Color(0xFF818895), fontSize: 12),
+                ),
+              ),
+          ],
         ),
+      ),
     ],
   );
 
@@ -1946,10 +2192,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
     value: SystemUiOverlayStyle.dark.copyWith(
-      statusBarColor: const Color(0xFFF7F8FA),
+      statusBarColor: const Color(0xFFF6FAFF),
       systemStatusBarContrastEnforced: false,
     ),
     child: Scaffold(
+      backgroundColor: const Color(0xFFF6FAFF),
       extendBody: true,
       body: SafeArea(
         bottom: false,
@@ -2196,6 +2443,7 @@ class _DragSelectableGridState extends State<_DragSelectableGrid> {
     child: GridView.builder(
       key: widget.gridKey,
       controller: widget.controller,
+      physics: widget.enabled ? const NeverScrollableScrollPhysics() : null,
       padding: widget.padding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: widget.crossAxisCount,
@@ -4899,13 +5147,15 @@ class _QueueScreenState extends State<QueueScreen> {
 
   void _selectionPointerDown(int index, PointerDownEvent event) {
     if (busy) return;
-    selectionPointer = event.pointer;
-    selectionStartIndex = index;
-    selectionStartPosition = event.position;
-    selectionBase = Set.of(selected);
-    selectionDragActive = false;
-    selectionDragPosition = null;
-    suppressCheckboxId = null;
+    setState(() {
+      selectionPointer = event.pointer;
+      selectionStartIndex = index;
+      selectionStartPosition = event.position;
+      selectionBase = Set.of(selected);
+      selectionDragActive = false;
+      selectionDragPosition = null;
+      suppressCheckboxId = null;
+    });
   }
 
   int? _queueIndexAt(Offset globalPosition) {
@@ -5007,11 +5257,13 @@ class _QueueScreenState extends State<QueueScreen> {
 
   void _selectionPointerEnd(PointerEvent event) {
     if (event.pointer != selectionPointer) return;
-    selectionPointer = null;
-    selectionStartIndex = null;
-    selectionStartPosition = null;
-    selectionDragActive = false;
-    selectionDragPosition = null;
+    setState(() {
+      selectionPointer = null;
+      selectionStartIndex = null;
+      selectionStartPosition = null;
+      selectionDragActive = false;
+      selectionDragPosition = null;
+    });
     selectionAutoScrollTimer?.cancel();
     selectionAutoScrollTimer = null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -5264,6 +5516,9 @@ class _QueueScreenState extends State<QueueScreen> {
               : GridView.builder(
                   key: queueGridKey,
                   controller: queueScroll,
+                  physics: selectionPointer == null
+                      ? null
+                      : const NeverScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: _photoGridColumnCount(
