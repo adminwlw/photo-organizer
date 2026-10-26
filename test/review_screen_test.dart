@@ -1350,6 +1350,68 @@ void main() {
     expect(find.text('本范围已整理完成'), findsNothing);
   });
 
+  testWidgets('completed review offers the delete queue before returning', (
+    tester,
+  ) async {
+    final store = UndoAppStore(database);
+    final app = CleanerState(store, FakeMediaRepository());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              key: const Key('open-review'),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ReviewScreen(app, Scope.all, source: const [photo]),
+                ),
+              ),
+              child: const Text('打开整理'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Future<void> completeReview() async {
+      await tester.tap(find.byKey(const Key('open-review')));
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('photo'))),
+      );
+      await gesture.moveBy(const Offset(0, -100));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('本范围已整理完成'), findsOneWidget);
+    }
+
+    await completeReview();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('别忘了删除照片'), findsOneWidget);
+    await tester.tap(find.text('稍后再说'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('open-review')), findsOneWidget);
+
+    await completeReview();
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(find.text('别忘了删除照片'), findsOneWidget);
+    expect(find.textContaining('待删除队列中还有 2 项'), findsOneWidget);
+
+    await tester.tap(find.text('进入待删除队列'));
+    await tester.pumpAndSettle();
+    expect(find.text('待删除队列'), findsOneWidget);
+    expect(find.text('本范围已整理完成'), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('open-review')), findsOneWidget);
+  });
+
   testWidgets('home follows the selected hero and stacked category layout', (
     tester,
   ) async {

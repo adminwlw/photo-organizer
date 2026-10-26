@@ -4148,6 +4148,8 @@ class _ReviewScreenState extends State<ReviewScreen>
   late final AnimationController motion;
   late Animation<Offset> motionAnimation;
   late Animation<double> scaleAnimation;
+  bool exitPromptOpen = false;
+  bool exitPromptBypassed = false;
   OverlayEntry? edgeNotice;
   String? edgeNoticeMessage;
   Timer? edgeNoticeTimer;
@@ -4868,6 +4870,48 @@ class _ReviewScreenState extends State<ReviewScreen>
     setState(() => currentFavorite = next);
   }
 
+  Future<void> _requestExit() async {
+    if (busy || exitPromptOpen) return;
+    if (current != null || queueCount == 0 || exitPromptBypassed) {
+      Navigator.pop(context, current?.id);
+      return;
+    }
+    exitPromptOpen = true;
+    final openQueue = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('别忘了删除照片'),
+        content: Text(
+          '本次整理已完成，待删除队列中还有 $queueCount 项照片或视频尚未最终删除。是否现在进入队列复核并删除？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('稍后再说'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('进入待删除队列'),
+          ),
+        ],
+      ),
+    );
+    exitPromptOpen = false;
+    if (!mounted) return;
+    setState(() => exitPromptBypassed = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    if (openQueue == true) {
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => QueueScreen(widget.app)),
+      );
+    } else {
+      Navigator.pop(context, current?.id);
+    }
+  }
+
   Widget _mediaStage(MediaRecord item) => GestureDetector(
     key: const Key('review-gesture'),
     behavior: HitTestBehavior.opaque,
@@ -5006,7 +5050,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   @override
   Widget build(BuildContext context) {
     final item = current;
-    return AnnotatedRegion<SystemUiOverlayStyle>(
+    final content = AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: Colors.transparent,
         systemNavigationBarColor: reviewBackground,
@@ -5049,9 +5093,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                         child: _glassIcon(
                           tooltip: '返回',
                           icon: Icons.arrow_back_ios_new_rounded,
-                          onPressed: busy
-                              ? null
-                              : () => Navigator.pop(context, current?.id),
+                          onPressed: busy ? null : _requestExit,
                           diameter: 44,
                           iconSize: 19,
                           color: const Color(0xB31A2433),
@@ -5236,6 +5278,13 @@ class _ReviewScreenState extends State<ReviewScreen>
           ],
         ),
       ),
+    );
+    return PopScope<Object?>(
+      canPop: item != null || queueCount == 0 || exitPromptBypassed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_requestExit());
+      },
+      child: content,
     );
   }
 
