@@ -2360,7 +2360,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
           _DragSelectableGrid(
             gridKey: const Key('album-media-grid'),
             controller: gridController,
-            padding: EdgeInsets.fromLTRB(4, 6, 4, selecting ? 82 : 16),
+            padding: const EdgeInsets.fromLTRB(4, 6, 4, 82),
             crossAxisCount: _photoGridColumnCount(
               MediaQuery.sizeOf(context).width,
             ),
@@ -2939,11 +2939,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
       4,
       6,
       4,
-      selecting
-          ? 82
-          : widget.scope.key == Scope.all.key && !pendingOnly
-          ? 116
-          : 16,
+      widget.scope.key == Scope.all.key && !pendingOnly ? 116 : 82,
     );
     return NotificationListener<ScrollNotification>(
       onNotification: _handleScroll,

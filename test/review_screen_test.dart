@@ -438,6 +438,31 @@ class AlbumDetailMediaRepository extends FakeMediaRepository {
   }
 }
 
+class LongAlbumDetailMediaRepository extends FakeMediaRepository {
+  final records = List.generate(
+    100,
+    (index) => MediaRecord(
+      id: 'album-photo-$index',
+      takenAt: 100000 - index,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    ),
+  );
+
+  @override
+  Future<List<MediaRecord>> recordsForAlbum(
+    AssetPathEntity path,
+    void Function(int, int) onProgress,
+  ) async {
+    onProgress(records.length, records.length);
+    return List.of(records);
+  }
+}
+
 const photo = MediaRecord(
   id: 'photo',
   takenAt: 1000,
@@ -1573,6 +1598,35 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('canceling category selection keeps the grid position', (
+    tester,
+  ) async {
+    final store = LongScopeAppStore(database, initialAnchor: 'photo-0');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ScopeScreen(
+          CleanerState(store, FakeMediaRepository()),
+          Scope.screenshots,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(
+      find.byKey(const Key('scope-media-grid')),
+    );
+    grid.controller!.jumpTo(grid.controller!.position.maxScrollExtent);
+    await tester.pump();
+    final offsetBeforeCancel = grid.controller!.offset;
+
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pumpAndSettle();
+
+    expect(grid.controller!.offset, closeTo(offsetBeforeCancel, 0.1));
+  });
+
   testWidgets('album detail shows live badge and queues selected items', (
     tester,
   ) async {
@@ -1649,6 +1703,41 @@ void main() {
     await gesture.up();
     await tester.pump();
     expect(find.text('已选择 0 项'), findsOneWidget);
+  });
+
+  testWidgets('canceling album selection keeps the grid position', (
+    tester,
+  ) async {
+    final media = LongAlbumDetailMediaRepository();
+    final album = SystemAlbumSummary(
+      path: AssetPathEntity(id: 'camera', name: '由我拍摄'),
+      count: media.records.length,
+      coverId: media.records.first.id,
+      group: SystemAlbumGroup.album,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SystemAlbumScreen(
+          CleanerState(UndoAppStore(database), media),
+          album,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pump();
+
+    final grid = tester.widget<GridView>(
+      find.byKey(const Key('album-media-grid')),
+    );
+    grid.controller!.jumpTo(grid.controller!.position.maxScrollExtent);
+    await tester.pump();
+    final offsetBeforeCancel = grid.controller!.offset;
+
+    await tester.tap(find.byKey(const Key('media-select-button')));
+    await tester.pumpAndSettle();
+
+    expect(grid.controller!.offset, closeTo(offsetBeforeCancel, 0.1));
   });
 
   testWidgets('similar photo groups open the existing review screen', (
