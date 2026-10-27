@@ -20,8 +20,9 @@ const _primaryLabel = Color(0xFF000000);
 const _secondaryLabel = Color(0x993C3C43);
 const _tertiaryLabel = Color(0x4D3C3C43);
 const _separator = Color(0x1F3C3C43);
-const _darkGlass = Color(0x66000000);
-const _lightGlass = Color(0xA6F9F9F9);
+const _appleGlass = Color(0x4DFFFFFF);
+const _appleGlassBorder = Color(0x99FFFFFF);
+const _appleGlassForeground = Color(0xE61C1C1E);
 
 enum DownSwipeAction { none, pending, returnToAlbum }
 
@@ -117,18 +118,33 @@ class _SystemTopGradient extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.light.copyWith(
+    value: SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
-    child: const IgnorePointer(
-      child: SizedBox.expand(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0x99000000), Color(0x00000000)],
+    child: IgnorePointer(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: FractionallySizedBox(
+          widthFactor: 1,
+          heightFactor: 0.76,
+          child: ClipRect(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x2EFFFFFF),
+                      Color(0x12FFFFFF),
+                      Color(0x00FFFFFF),
+                    ],
+                    stops: [0, 0.62, 1],
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -139,8 +155,9 @@ class _SystemTopGradient extends StatelessWidget {
 
 class _GlassSurface extends StatelessWidget {
   const _GlassSurface({
+    super.key,
     required this.child,
-    this.color = _darkGlass,
+    this.color = _appleGlass,
     this.radius = 20,
     this.padding = EdgeInsets.zero,
   });
@@ -156,21 +173,21 @@ class _GlassSurface extends StatelessWidget {
       borderRadius: BorderRadius.circular(radius),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x1F000000),
-          blurRadius: 12,
-          offset: Offset(0, 4),
+          color: Color(0x18000000),
+          blurRadius: 18,
+          offset: Offset(0, 8),
         ),
       ],
     ),
     child: ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
+            border: Border.all(color: _appleGlassBorder, width: 0.8),
           ),
           child: Padding(padding: padding, child: child),
         ),
@@ -188,7 +205,8 @@ class _GlassIconButton extends StatelessWidget {
     required this.onPressed,
     this.diameter = 42,
     this.iconSize = 20,
-    this.color = _darkGlass,
+    this.color = _appleGlass,
+    this.foregroundColor = _appleGlassForeground,
   });
 
   final Key? buttonKey;
@@ -198,6 +216,7 @@ class _GlassIconButton extends StatelessWidget {
   final double diameter;
   final double iconSize;
   final Color color;
+  final Color foregroundColor;
 
   @override
   Widget build(BuildContext context) => _GlassSurface(
@@ -207,11 +226,44 @@ class _GlassIconButton extends StatelessWidget {
       key: buttonKey,
       tooltip: tooltip,
       onPressed: onPressed,
-      color: Colors.white,
-      disabledColor: Colors.white60,
+      color: foregroundColor,
+      disabledColor: const Color(0x663C3C43),
       constraints: BoxConstraints.tightFor(width: diameter, height: diameter),
       padding: EdgeInsets.zero,
       icon: Icon(icon, size: iconSize),
+    ),
+  );
+}
+
+class _GlassActionButton extends StatelessWidget {
+  const _GlassActionButton({
+    required this.buttonKey,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.foregroundColor = _appleGlassForeground,
+  });
+
+  final Key buttonKey;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) => _GlassSurface(
+    radius: 18,
+    child: TextButton.icon(
+      key: buttonKey,
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: foregroundColor,
+        disabledForegroundColor: const Color(0x663C3C43),
+        minimumSize: const Size.fromHeight(52),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      icon: Icon(icon),
+      label: Text(label),
     ),
   );
 }
@@ -434,11 +486,16 @@ class _FloatingGlassAppBar extends StatelessWidget
     automaticallyImplyLeading: false,
     forceMaterialTransparency: true,
     backgroundColor: Colors.transparent,
-    foregroundColor: Colors.white,
+    foregroundColor: _appleGlassForeground,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
-    systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+    titleTextStyle: const TextStyle(
+      color: _appleGlassForeground,
+      fontSize: 17,
+      fontWeight: FontWeight.w600,
+    ),
+    systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
@@ -491,7 +548,7 @@ class _MediaGradientAppBar extends StatelessWidget
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
-    systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+    systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
@@ -520,7 +577,7 @@ class _MediaGradientAppBar extends StatelessWidget
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Colors.white,
+            color: _appleGlassForeground,
             fontSize: 17,
             fontWeight: FontWeight.w600,
             height: 1.12,
@@ -532,7 +589,7 @@ class _MediaGradientAppBar extends StatelessWidget
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Color(0xCCFFFFFF),
+            color: _secondaryLabel,
             fontSize: 12,
             fontWeight: FontWeight.w400,
           ),
@@ -559,8 +616,8 @@ class _HeaderSelectButton extends StatelessWidget {
           key: const Key('media-select-button'),
           onPressed: onPressed,
           style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
-            disabledForegroundColor: const Color(0x66FFFFFF),
+            foregroundColor: _appleGlassForeground,
+            disabledForegroundColor: const Color(0x663C3C43),
             backgroundColor: Colors.transparent,
             minimumSize: const Size(62, 36),
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -779,7 +836,7 @@ class _StartupBrand extends StatelessWidget {
           left: 0,
           right: 0,
           top: 0,
-          height: 96,
+          height: 84,
           child: _SystemTopGradient(key: Key('page-top-gradient')),
         ),
         SafeArea(
@@ -1346,7 +1403,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             left: 0,
             right: 0,
             top: 0,
-            height: 96,
+            height: 84,
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
         SafeArea(
@@ -1573,7 +1630,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<List<MediaRecord>> _loadAllMediaCover() async => (await Future.wait([
-    for (var index = 0; index < 4; index++) app.store.at(Scope.all, index),
+    for (var index = 0; index < 3; index++) app.store.at(Scope.all, index),
   ])).whereType<MediaRecord>().toList();
 
   Future<List<int>> _loadLocalCategoryCounts() => Future.wait([
@@ -1685,28 +1742,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      Material(
-        color: const Color(0xD9FFFFFF),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          key: const Key('home-tutorial'),
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => _open(
-            OnboardingScreen(
-              downAction: app.downAction,
-              onDone: () async {
-                if (mounted) Navigator.pop(context);
-              },
-            ),
-          ),
-          child: const SizedBox(
-            width: 48,
-            height: 48,
-            child: Icon(
-              Icons.help_outline_rounded,
-              color: Color(0xFF1557F8),
-              size: 27,
-            ),
+      _GlassIconButton(
+        buttonKey: const Key('home-tutorial'),
+        tooltip: '使用教程',
+        icon: Icons.help_outline_rounded,
+        foregroundColor: _systemBlue,
+        diameter: 48,
+        iconSize: 27,
+        onPressed: () => _open(
+          OnboardingScreen(
+            downAction: app.downAction,
+            onDone: () async {
+              if (mounted) Navigator.pop(context);
+            },
           ),
         ),
       ),
@@ -1799,47 +1847,20 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _heroPhoto(MediaRecord? item, {Key? key}) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white, width: 4),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x1A23469A),
-          blurRadius: 16,
-          offset: Offset(0, 7),
-        ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: item == null
-          ? const ColoredBox(
-              color: Color(0xFFDCEBFF),
-              child: Icon(
-                Icons.photo_library_outlined,
-                color: Color(0xFF78A7FF),
-              ),
-            )
-          : MediaThumb(app.media, item.id, key: key, width: 240, height: 180),
-    ),
-  );
-
   Widget _heroIntro() => SizedBox(
-    height: 160,
+    height: 142,
     child: LayoutBuilder(
       builder: (context, constraints) {
-        final artWidth = (constraints.maxWidth * 0.46)
-            .clamp(132.0, 172.0)
+        final artWidth = (constraints.maxWidth * 0.43)
+            .clamp(136.0, 166.0)
             .toDouble();
         return Stack(
           clipBehavior: Clip.none,
           children: [
             Positioned(
               left: 0,
-              top: 26,
-              width: constraints.maxWidth - artWidth + 8,
+              top: 18,
+              width: constraints.maxWidth - artWidth - 8,
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1866,61 +1887,34 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Positioned(
-              right: 0,
-              top: 0,
+              right: 12,
+              top: -2,
               width: artWidth,
-              height: 152,
-              child: FutureBuilder<List<MediaRecord>>(
-                future: allMediaCover,
-                builder: (context, snapshot) {
-                  final items = snapshot.data ?? const <MediaRecord>[];
-                  MediaRecord? itemAt(int index) =>
-                      index < items.length ? items[index] : null;
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned(
-                        right: 8,
-                        top: 4,
-                        width: 112,
-                        height: 82,
-                        child: Transform.rotate(
-                          angle: 0.08,
-                          child: _heroPhoto(
-                            itemAt(0),
-                            key: const Key('home-hero-photo-0'),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 38,
-                        top: 60,
-                        width: 108,
-                        height: 80,
-                        child: Transform.rotate(
-                          angle: -0.08,
-                          child: _heroPhoto(
-                            itemAt(1),
-                            key: const Key('home-hero-photo-1'),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: -1,
-                        top: 77,
-                        width: 103,
-                        height: 75,
-                        child: Transform.rotate(
-                          angle: 0.1,
-                          child: _heroPhoto(
-                            itemAt(2),
-                            key: const Key('home-hero-photo-2'),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              height: 116,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white, width: 4),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1F23469A),
+                      blurRadius: 18,
+                      offset: Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/home-hero-landscape.png',
+                    key: const Key('home-hero-landscape'),
+                    fit: BoxFit.cover,
+                    alignment: const Alignment(-0.25, -0.08),
+                    cacheWidth: 720,
+                    excludeFromSemantics: true,
+                  ),
+                ),
               ),
             ),
           ],
@@ -1944,119 +1938,110 @@ class _HomeScreenState extends State<HomeScreen> {
         final ratio = hasProgress ? completed / progress.total : 0.0;
         final percent = (ratio * 100).round();
         final enabled = hasProgress || available != 0;
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            key: const Key('review-hero'),
-            borderRadius: BorderRadius.circular(22),
-            onTap: enabled
-                ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
-                : null,
-            child: Ink(
-              height: 76,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF36A7F4),
-                    Color(0xFF3E77F7),
-                    Color(0xFF7565F2),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x294663EF),
-                    blurRadius: 18,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 52,
-                          height: 52,
-                          child: CircularProgressIndicator(
-                            value: ratio,
-                            strokeWidth: 4,
-                            backgroundColor: const Color(0x55FFFFFF),
-                            color: Colors.white,
-                          ),
-                        ),
-                        Container(
-                          width: 42,
-                          height: 42,
+        return _GlassSurface(
+          key: const Key('review-hero-glass'),
+          radius: 22,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const Key('review-hero'),
+              borderRadius: BorderRadius.circular(22),
+              onTap: enabled
+                  ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
+                  : null,
+              child: SizedBox(
+                height: 76,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: Stack(
                           alignment: Alignment.center,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$percent%',
-                            style: const TextStyle(
-                              color: Color(0xFF1557F8),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
+                          children: [
+                            SizedBox(
+                              width: 52,
+                              height: 52,
+                              child: CircularProgressIndicator(
+                                value: ratio,
+                                strokeWidth: 4,
+                                backgroundColor: const Color(0x99FFFFFF),
+                                color: _systemBlue,
+                              ),
                             ),
-                          ),
+                            Container(
+                              width: 42,
+                              height: 42,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: Color(0xBFFFFFFF),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$percent%',
+                                style: const TextStyle(
+                                  color: Color(0xFF1557F8),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          hasProgress ? '继续整理' : '开始整理',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasProgress ? '继续整理' : '开始整理',
+                              style: const TextStyle(
+                                color: _primaryLabel,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              hasProgress
+                                  ? '第 $completed / ${progress.total} 项'
+                                  : total == null
+                                  ? '正在读取相册'
+                                  : '当前可整理 $total 项照片与视频',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: _secondaryLabel,
+                                fontSize: 13,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          hasProgress
-                              ? '第 $completed / ${progress.total} 项'
-                              : total == null
-                              ? '正在读取相册'
-                              : '当前可整理 $total 项照片与视频',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xE6FFFFFF),
-                            fontSize: 13,
-                            height: 1.3,
-                          ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: enabled
+                              ? const Color(0xBFFFFFFF)
+                              : const Color(0x66FFFFFF),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
+                        child: const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Color(0xFF3158E6),
+                          size: 24,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: enabled ? Colors.white : const Color(0x99FFFFFF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Color(0xFF3158E6),
-                      size: 24,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2211,17 +2196,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _allMediaMosaic(List<MediaRecord> items) {
-    return GridView.builder(
-      padding: EdgeInsets.zero,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: 4,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-      ),
-      itemBuilder: (context, index) => index < items.length
+  Widget _allMediaMosaic(List<MediaRecord> items) => LayoutBuilder(
+    builder: (context, constraints) {
+      const gap = 4.0;
+      final sideWidth = constraints.maxWidth * 0.36;
+      final mainWidth = constraints.maxWidth - sideWidth - gap;
+      final sideHeight = (constraints.maxHeight - gap) / 2;
+      Widget cell(int index) => index < items.length
           ? _allMediaCoverCell(items[index], index)
           : const ColoredBox(
               color: Color(0xFFEAF2FF),
@@ -2230,9 +2211,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Color(0xFFAAC3F8),
                 size: 24,
               ),
-            ),
-    );
-  }
+            );
+      return Stack(
+        key: const Key('all-media-art-mosaic'),
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: mainWidth,
+            child: cell(0),
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            width: sideWidth,
+            height: sideHeight,
+            child: cell(1),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            width: sideWidth,
+            height: sideHeight,
+            child: cell(2),
+          ),
+        ],
+      );
+    },
+  );
 
   Widget _allMediaCategoryTile() => FutureBuilder<int>(
     key: const Key('home-all-media-card'),
@@ -2926,7 +2933,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.light.copyWith(
+    value: SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
@@ -2936,107 +2943,74 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          SafeArea(bottom: false, child: _tabBody()),
           const Positioned(
             left: 0,
             right: 0,
             top: 0,
-            height: 96,
+            height: 84,
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
+          SafeArea(bottom: false, child: _tabBody()),
         ],
       ),
       bottomNavigationBar: SafeArea(
         top: false,
         minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x26000000),
-                blurRadius: 24,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            key: const Key('home-glass-nav'),
-            borderRadius: BorderRadius.circular(30),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-              child: Stack(
-                children: [
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xC7FFFFFF), Color(0x8CF4F4F8)],
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: const Color(0xCFFFFFFF),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: NavigationBar(
-                      height: 62,
-                      selectedIndex: tab,
-                      onDestinationSelected: (index) {
-                        if (index == 1) _ensureAlbumsLoaded();
-                        setState(() => tab = index);
-                        if (index == 2) _calculateStorage();
-                      },
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      destinations: const [
-                        NavigationDestination(
-                          key: Key('home-tab'),
-                          icon: Icon(Icons.photo_library_outlined),
-                          selectedIcon: _SelectedNavIcon(
-                            Icons.photo_library_rounded,
-                          ),
-                          label: '首页',
-                        ),
-                        NavigationDestination(
-                          key: Key('albums-tab'),
-                          icon: Icon(Icons.grid_view_outlined),
-                          selectedIcon: _SelectedNavIcon(
-                            Icons.grid_view_rounded,
-                          ),
-                          label: '相册',
-                        ),
-                        NavigationDestination(
-                          key: Key('profile-tab'),
-                          icon: Icon(Icons.person_outline_rounded),
-                          selectedIcon: _SelectedNavIcon(Icons.person_rounded),
-                          label: '我的',
-                        ),
-                      ],
-                    ),
+        child: _GlassSurface(
+          key: const Key('home-glass-nav'),
+          radius: 30,
+          child: Stack(
+            children: [
+              NavigationBar(
+                height: 62,
+                selectedIndex: tab,
+                onDestinationSelected: (index) {
+                  if (index == 1) _ensureAlbumsLoaded();
+                  setState(() => tab = index);
+                  if (index == 2) _calculateStorage();
+                },
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                destinations: const [
+                  NavigationDestination(
+                    key: Key('home-tab'),
+                    icon: Icon(Icons.photo_library_outlined),
+                    selectedIcon: _SelectedNavIcon(Icons.photo_library_rounded),
+                    label: '首页',
                   ),
-                  const Positioned(
-                    key: Key('home-glass-reflection'),
-                    left: 24,
-                    right: 24,
-                    top: 1,
-                    height: 1,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Color(0x00FFFFFF),
-                            Color(0xFFFFFFFF),
-                            Color(0x00FFFFFF),
-                          ],
-                        ),
-                      ),
-                    ),
+                  NavigationDestination(
+                    key: Key('albums-tab'),
+                    icon: Icon(Icons.grid_view_outlined),
+                    selectedIcon: _SelectedNavIcon(Icons.grid_view_rounded),
+                    label: '相册',
+                  ),
+                  NavigationDestination(
+                    key: Key('profile-tab'),
+                    icon: Icon(Icons.person_outline_rounded),
+                    selectedIcon: _SelectedNavIcon(Icons.person_rounded),
+                    label: '我的',
                   ),
                 ],
               ),
-            ),
+              const Positioned(
+                key: Key('home-glass-reflection'),
+                left: 24,
+                right: 24,
+                top: 1,
+                height: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0x00FFFFFF),
+                        Color(0xFFFFFFFF),
+                        Color(0x00FFFFFF),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -4634,7 +4608,9 @@ class _ScopeScreenState extends State<ScopeScreen> {
                   });
                   _refresh();
                 },
-                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                style: TextButton.styleFrom(
+                  foregroundColor: _appleGlassForeground,
+                ),
                 icon: Icon(
                   pendingOnly
                       ? Icons.photo_library_outlined
@@ -4665,7 +4641,7 @@ class _LibraryGlassControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _GlassSurface(
-    color: _lightGlass,
+    color: _appleGlass,
     radius: 16,
     child: SizedBox(height: 52, child: child),
   );
@@ -5793,7 +5769,7 @@ class _ReviewScreenState extends State<ReviewScreen>
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('进入待删除队列'),
+              child: const Text('进入待删除队列删除'),
             ),
           ],
         ),
@@ -5987,7 +5963,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   Widget build(BuildContext context) {
     final item = current;
     final content = AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
+      value: SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: Colors.transparent,
         systemNavigationBarColor: reviewBackground,
         systemNavigationBarIconBrightness: Brightness.dark,
@@ -6007,7 +5983,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                   child: const Text(
                     '本范围已整理完成',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _appleGlassForeground,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -6020,7 +5996,7 @@ class _ReviewScreenState extends State<ReviewScreen>
               left: 0,
               right: 0,
               top: 0,
-              height: 112,
+              height: 88,
               child: _SystemTopGradient(key: Key('page-top-gradient')),
             ),
             ValueListenableBuilder<int>(
@@ -6039,7 +6015,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                           onPressed: busy ? null : _requestExit,
                           diameter: 44,
                           iconSize: 19,
-                          color: _darkGlass,
+                          color: _appleGlass,
                         ),
                       ),
                       Align(
@@ -6049,7 +6025,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                             horizontal: 13,
                             vertical: 8,
                           ),
-                          color: _darkGlass,
+                          color: _appleGlass,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -6058,7 +6034,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     ? '$total / $total'
                                     : '${index + 1} / $total',
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: _appleGlassForeground,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.2,
@@ -6069,7 +6045,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                 Text(
                                   _formatMediaDate(item.takenAt),
                                   style: const TextStyle(
-                                    color: Color(0xFFDDE5F2),
+                                    color: _secondaryLabel,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -6123,7 +6099,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     diameter: 44,
                                     iconSize: 20,
                                     color: Color.lerp(
-                                      _darkGlass,
+                                      _appleGlass,
                                       const Color(0xF2FF3B30),
                                       progress,
                                     )!,
@@ -6199,7 +6175,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     : _toggleFavorite,
                                 color: currentFavorite
                                     ? const Color(0xD9E9A23B)
-                                    : _darkGlass,
+                                    : _appleGlass,
                               ),
                             const SizedBox(width: 12),
                             _glassIcon(
@@ -6234,7 +6210,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   Widget _glass({
     required Widget child,
     required EdgeInsets padding,
-    Color color = _darkGlass,
+    Color color = _appleGlass,
   }) => _GlassSurface(color: color, radius: 22, padding: padding, child: child);
 
   Widget _glassIcon({
@@ -6244,7 +6220,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     required VoidCallback? onPressed,
     double diameter = 48,
     double iconSize = 22,
-    Color color = _darkGlass,
+    Color color = _appleGlass,
   }) => _GlassIconButton(
     buttonKey: key,
     tooltip: tooltip,
@@ -6969,7 +6945,9 @@ class _QueueScreenState extends State<QueueScreen> {
                           );
                         }
                       }),
-                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                style: TextButton.styleFrom(
+                  foregroundColor: _appleGlassForeground,
+                ),
                 child: Text(
                   rows.isNotEmpty && selected.length == rows.length
                       ? '取消全选'
@@ -7141,7 +7119,7 @@ class _QueueScreenState extends State<QueueScreen> {
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: _GlassSurface(
-                          color: _lightGlass,
+                          color: _appleGlass,
                           radius: 15,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -7163,31 +7141,26 @@ class _QueueScreenState extends State<QueueScreen> {
             children: [
               Expanded(
                 flex: 2,
-                child: SizedBox(
-                  key: const Key('queue-restore-selected'),
-                  height: 52,
-                  child: OutlinedButton.icon(
-                    onPressed: busy || selected.isEmpty
-                        ? null
-                        : () => _restore(selected.toList()),
-                    icon: const Icon(Icons.undo_rounded),
-                    label: Text('保留 ${selected.length} 项'),
-                  ),
+                child: _GlassActionButton(
+                  buttonKey: const Key('queue-restore-selected'),
+                  icon: Icons.undo_rounded,
+                  label: '保留 ${selected.length} 项',
+                  onPressed: busy || selected.isEmpty
+                      ? null
+                      : () => _restore(selected.toList()),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 3,
-                child: SizedBox(
-                  key: const Key('queue-delete-selected'),
-                  height: 52,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: _systemRed),
-                    onPressed: busy || selected.isEmpty
-                        ? null
-                        : () => _process(selected),
-                    child: Text(busy ? '等待系统处理…' : '删除 ${selected.length} 项'),
-                  ),
+                child: _GlassActionButton(
+                  buttonKey: const Key('queue-delete-selected'),
+                  icon: Icons.delete_outline_rounded,
+                  label: busy ? '等待系统处理…' : '删除 ${selected.length} 项',
+                  foregroundColor: _systemRed,
+                  onPressed: busy || selected.isEmpty
+                      ? null
+                      : () => _process(selected),
                 ),
               ),
             ],
@@ -7463,7 +7436,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.light.copyWith(
+    value: SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
       systemNavigationBarColor: Colors.black,
     ),
@@ -7477,7 +7450,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
             left: 0,
             right: 0,
             top: 0,
-            height: 112,
+            height: 88,
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
           Visibility(
@@ -7509,7 +7482,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
                         '${index + 1} / ${ids.length}',
                         key: const Key('queue-preview-counter'),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: _appleGlassForeground,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -7534,13 +7507,13 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
                               children: const [
                                 Icon(
                                   Icons.keyboard_arrow_down_rounded,
-                                  color: Colors.white,
+                                  color: _appleGlassForeground,
                                 ),
                                 SizedBox(width: 5),
                                 Text(
                                   '左右滑动浏览 · 下滑返回',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: _appleGlassForeground,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -7551,40 +7524,25 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
                           Row(
                             children: [
                               Expanded(
-                                child: SizedBox(
-                                  height: 52,
-                                  child: OutlinedButton.icon(
-                                    key: const Key('queue-preview-keep'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      backgroundColor: Colors.black54,
-                                      side: const BorderSide(
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    onPressed: busy
-                                        ? null
-                                        : () => _act(keep: true),
-                                    icon: const Icon(Icons.undo_rounded),
-                                    label: const Text('保留此项'),
-                                  ),
+                                child: _GlassActionButton(
+                                  buttonKey: const Key('queue-preview-keep'),
+                                  icon: Icons.undo_rounded,
+                                  label: '保留此项',
+                                  onPressed: busy
+                                      ? null
+                                      : () => _act(keep: true),
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: SizedBox(
-                                  height: 52,
-                                  child: FilledButton.icon(
-                                    key: const Key('queue-preview-delete'),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: _systemRed,
-                                    ),
-                                    onPressed: busy
-                                        ? null
-                                        : () => _act(keep: false),
-                                    icon: const Icon(Icons.delete_outline),
-                                    label: const Text('删除此项'),
-                                  ),
+                                child: _GlassActionButton(
+                                  buttonKey: const Key('queue-preview-delete'),
+                                  icon: Icons.delete_outline_rounded,
+                                  label: '删除此项',
+                                  foregroundColor: _systemRed,
+                                  onPressed: busy
+                                      ? null
+                                      : () => _act(keep: false),
                                 ),
                               ),
                             ],

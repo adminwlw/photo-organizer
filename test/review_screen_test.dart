@@ -784,7 +784,7 @@ void main() {
         )
         .single
         .value;
-    expect(topStyle.statusBarIconBrightness, Brightness.light);
+    expect(topStyle.statusBarIconBrightness, Brightness.dark);
     final topGradient =
         tester
                 .widgetList<DecoratedBox>(
@@ -796,10 +796,20 @@ void main() {
                 .single
                 .decoration
             as BoxDecoration;
-    expect((topGradient.gradient! as LinearGradient).colors, const [
-      Color(0x99000000),
-      Color(0x00000000),
+    final gradient = topGradient.gradient! as LinearGradient;
+    expect(gradient.colors, const [
+      Color(0x2EFFFFFF),
+      Color(0x12FFFFFF),
+      Color(0x00FFFFFF),
     ]);
+    expect(gradient.stops, const [0, 0.62, 1]);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('page-top-gradient')),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+    );
 
     await tester.pump(const Duration(milliseconds: 2800));
     await tester.pump(const Duration(milliseconds: 400));
@@ -1627,7 +1637,7 @@ void main() {
     expect(find.text('别忘了删除照片'), findsOneWidget);
     expect(find.textContaining('待删除队列中还有 2 项'), findsOneWidget);
 
-    await tester.tap(find.text('进入待删除队列'));
+    await tester.tap(find.text('进入待删除队列删除'));
     await tester.pumpAndSettle();
     expect(find.text('待删除队列'), findsOneWidget);
     expect(find.text('本范围已整理完成'), findsNothing);
@@ -1699,9 +1709,8 @@ void main() {
     expect(find.text('相册删除'), findsOneWidget);
     expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
     expect(find.text('从上次停下的位置继续整理'), findsOneWidget);
-    for (var index = 0; index < 3; index++) {
-      expect(find.byKey(Key('home-hero-photo-$index')), findsOneWidget);
-    }
+    expect(find.byKey(const Key('home-hero-landscape')), findsOneWidget);
+    expect(find.byKey(const Key('home-hero-photo-0')), findsNothing);
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
     final allMediaSize = tester.getSize(
       find.byKey(const ValueKey('category-all')),
@@ -1709,13 +1718,14 @@ void main() {
     expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
     expect(allMediaSize.height, inInclusiveRange(160, 175));
     expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
-    final reviewHeroInk = tester.widget<Ink>(
+    expect(find.byKey(const Key('review-hero-glass')), findsOneWidget);
+    expect(
       find.descendant(
-        of: find.byKey(const Key('review-hero')),
-        matching: find.byType(Ink),
+        of: find.byKey(const Key('review-hero-glass')),
+        matching: find.byType(BackdropFilter),
       ),
+      findsOneWidget,
     );
-    expect((reviewHeroInk.decoration as BoxDecoration).gradient, isNotNull);
     expect(find.text('整理进度'), findsNothing);
     expect(find.text('待删除队列'), findsNothing);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
@@ -1728,6 +1738,7 @@ void main() {
       find.byKey(const ValueKey('all-media-cover-video-marker-video')),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('all-media-art-mosaic')), findsOneWidget);
     expect(
       tester.getTopLeft(find.byKey(const Key('home-all-media-card'))).dy,
       lessThan(
@@ -1802,40 +1813,36 @@ void main() {
     expect(find.byKey(const ValueKey('section-待删除')), findsNothing);
   });
 
-  testWidgets('all media cover uses the reference two-by-two photo grid', (
-    tester,
-  ) async {
+  testWidgets('all media cover uses an asymmetric art mosaic', (tester) async {
     final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
 
-    for (final item in SixMediaAppStore.media.take(4)) {
+    for (final item in SixMediaAppStore.media.take(3)) {
       expect(
         find.byKey(ValueKey('all-media-cover-${item.id}')),
         findsOneWidget,
       );
     }
-    for (final item in SixMediaAppStore.media.skip(4)) {
+    for (final item in SixMediaAppStore.media.skip(3)) {
       expect(find.byKey(ValueKey('all-media-cover-${item.id}')), findsNothing);
     }
-    final topLeft = tester.getRect(
+    final main = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-0')),
     );
-    final topRight = tester.getRect(
+    final sideTop = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-1')),
     );
-    final bottomLeft = tester.getRect(
+    final sideBottom = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-2')),
     );
-    final bottomRight = tester.getRect(
-      find.byKey(const ValueKey('all-media-cover-cell-3')),
-    );
-    expect(topLeft.top, moreOrLessEquals(topRight.top, epsilon: 0.1));
-    expect(bottomLeft.top, moreOrLessEquals(bottomRight.top, epsilon: 0.1));
-    expect(bottomLeft.top, greaterThan(topLeft.bottom));
-    expect(bottomLeft.left, moreOrLessEquals(topLeft.left, epsilon: 0.1));
-    expect(bottomRight.left, greaterThan(bottomLeft.right));
+    expect(main.top, moreOrLessEquals(sideTop.top, epsilon: 0.1));
+    expect(main.bottom, moreOrLessEquals(sideBottom.bottom, epsilon: 0.1));
+    expect(sideTop.left, greaterThan(main.right));
+    expect(sideBottom.left, moreOrLessEquals(sideTop.left, epsilon: 0.1));
+    expect(sideBottom.top, greaterThan(sideTop.bottom));
+    expect(main.height, greaterThan(sideTop.height * 2));
     expect(find.text('立即清理'), findsNothing);
     expect(
       find.descendant(
@@ -2480,7 +2487,7 @@ void main() {
         .first;
     expect(
       (libraryGlass.decoration as BoxDecoration).color,
-      const Color(0xA6F9F9F9),
+      const Color(0x4DFFFFFF),
     );
     final libraryIcon = tester.widget<Icon>(
       find.descendant(
@@ -2710,7 +2717,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.undo_rounded), findsOneWidget);
-    expect(tester.widget<AppBar>(find.byType(AppBar)).primary, isTrue);
+    final queueAppBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(queueAppBar.primary, isTrue);
+    expect(queueAppBar.titleTextStyle?.color, const Color(0xE61C1C1E));
     expect(find.text('保留 0 项'), findsOneWidget);
     expect(find.text('删除 0 项'), findsOneWidget);
 
