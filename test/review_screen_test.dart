@@ -27,6 +27,10 @@ class FakeMediaRepository extends MediaRepository {
   Future<int> cachedSimilarPhotoCount(AppStore store) async => 0;
 
   @override
+  Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async =>
+      null;
+
+  @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
     void Function(int, int) onProgress,
@@ -123,6 +127,25 @@ class SimilarMediaRepository extends FakeMediaRepository {
     return const [
       SimilarPhotoGroup([photo, nextPhoto]),
     ];
+  }
+}
+
+class RefreshingSimilarMediaRepository extends SimilarMediaRepository {
+  final refresh = Completer<List<SimilarPhotoGroup>>();
+
+  @override
+  Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async =>
+      const [
+        SimilarPhotoGroup([photo, nextPhoto]),
+      ];
+
+  @override
+  Future<List<SimilarPhotoGroup>> findSimilarPhotos(
+    AppStore store,
+    void Function(int, int) onProgress,
+  ) {
+    onProgress(2, 3);
+    return refresh.future;
   }
 }
 
@@ -2238,6 +2261,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ReviewScreen), findsOneWidget);
     expect(find.byKey(const ValueKey('photo')), findsOneWidget);
+  });
+
+  testWidgets('similar photos show cached groups while refreshing', (
+    tester,
+  ) async {
+    final media = RefreshingSimilarMediaRepository();
+    final app = CleanerState(ScopeAppStore(database), media);
+
+    await tester.pumpWidget(MaterialApp(home: SimilarPhotosScreen(app)));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('第 1 组 · 2 张'), findsOneWidget);
+    expect(find.text('正在更新 2 / 3 张'), findsOneWidget);
+
+    media.refresh.complete(const [
+      SimilarPhotoGroup([photo, nextPhoto, thirdPhoto]),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 1 组 · 3 张'), findsOneWidget);
+    expect(find.text('正在更新 2 / 3 张'), findsNothing);
   });
 
   testWidgets(

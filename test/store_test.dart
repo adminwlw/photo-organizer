@@ -1,8 +1,21 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:album_cleaner/media_repository.dart';
 import 'package:album_cleaner/store.dart';
+
+class CountingThumbnailRepository extends MediaRepository {
+  int thumbnailRequests = 0;
+
+  @override
+  Future<Uint8List?> thumbnail(String id, int width, int height) async {
+    thumbnailRequests++;
+    return null;
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -108,11 +121,244 @@ void main() {
     ];
     await store.upsertMediaPage(photos, 1);
     await store.finishScan(1);
-    await store.saveSimilarityHash('a', '0000000000000000');
-    await store.saveSimilarityHash('b', '0000000000000001');
+    await store.saveSimilarityHash(
+      photos[0],
+      '0000000000000000',
+      algorithmVersion: similarityAlgorithmVersion,
+    );
+    await store.saveSimilarityHash(
+      photos[1],
+      '0000000000000001',
+      algorithmVersion: similarityAlgorithmVersion,
+    );
 
     expect(await MediaRepository().cachedSimilarPhotoCount(store), 2);
-    expect(await store.similarityHashes(), hasLength(2));
+    expect(
+      await store.similarityHashes(
+        algorithmVersion: similarityAlgorithmVersion,
+      ),
+      hasLength(2),
+    );
+  });
+
+  test('similarity hashes expire when media metadata changes', () async {
+    final store = await AppStore.open(path: inMemoryDatabasePath);
+    addTearDown(store.close);
+    const original = MediaRecord(
+      id: 'photo',
+      takenAt: 1,
+      modifiedAt: 10,
+      width: 100,
+      height: 80,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    await store.upsertMediaPage([original], 1);
+    await store.saveSimilarityHash(
+      original,
+      '0000000000000000',
+      algorithmVersion: similarityAlgorithmVersion,
+    );
+
+    expect(
+      await store.similarityHashes(
+        algorithmVersion: similarityAlgorithmVersion,
+      ),
+      {'photo': '0000000000000000'},
+    );
+
+    const edited = MediaRecord(
+      id: 'photo',
+      takenAt: 1,
+      modifiedAt: 11,
+      width: 100,
+      height: 80,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    await store.upsertMediaPage([edited], 2);
+
+    expect(
+      await store.similarityHashes(
+        algorithmVersion: similarityAlgorithmVersion,
+      ),
+      isEmpty,
+    );
+  });
+
+  test(
+    'version 3 databases migrate without keeping unverifiable hashes',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'album-cleaner-store-test-',
+      );
+      final path = '${directory.path}${Platform.pathSeparator}legacy.db';
+      final legacy = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: (db, _) async {
+            await db.execute('''CREATE TABLE media_cache (
+            id TEXT PRIMARY KEY, taken_at INTEGER NOT NULL, month TEXT NOT NULL,
+            type INTEGER NOT NULL, duration INTEGER NOT NULL,
+            screenshot INTEGER NOT NULL, selfie INTEGER NOT NULL,
+            live INTEGER NOT NULL, last_seen_at INTEGER NOT NULL)''');
+            await db.execute('''CREATE TABLE media_similarity (
+            media_id TEXT PRIMARY KEY, hash TEXT NOT NULL)''');
+            await db.execute('''CREATE TABLE app_settings (
+            key TEXT PRIMARY KEY, value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL)''');
+          },
+        ),
+      );
+      await legacy.insert('media_cache', {
+        'id': 'photo',
+        'taken_at': 1,
+        'month': '2026-10',
+        'type': 1,
+        'duration': 0,
+        'screenshot': 0,
+        'selfie': 0,
+        'live': 0,
+        'last_seen_at': 1,
+      });
+      await legacy.insert('media_similarity', {
+        'media_id': 'photo',
+        'hash': '0000000000000000',
+      });
+      await legacy.close();
+
+      final store = await AppStore.open(path: path);
+      addTearDown(() async {
+        await store.close();
+        await directory.delete(recursive: true);
+      });
+
+      final photo = (await store.photoRecords()).single;
+      expect((photo.modifiedAt, photo.width, photo.height), (0, 0, 0));
+      expect(
+        await store.similarityHashes(
+          algorithmVersion: similarityAlgorithmVersion,
+        ),
+        isEmpty,
+      );
+      expect(
+        await store.similarityGroups(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'similarity group snapshots round-trip and prune missing media',
+    () async {
+      final store = await AppStore.open(path: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final photos = [
+        for (var index = 0; index < 3; index++)
+          MediaRecord(
+            id: 'photo-$index',
+            takenAt: 3 - index,
+            month: '2026-10',
+            type: 1,
+            duration: 0,
+            screenshot: false,
+            selfie: false,
+            live: false,
+          ),
+      ];
+      await store.upsertMediaPage(photos, 1);
+      await store.finishScan(1);
+      await store.replaceSimilarityGroups(
+        [
+          ['photo-0', 'photo-1'],
+        ],
+        algorithmVersion: similarityAlgorithmVersion,
+        maxDistance: similarityMaxDistance,
+      );
+
+      expect(
+        await store.similarityGroups(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
+        [
+          ['photo-0', 'photo-1'],
+        ],
+      );
+      expect(
+        await store.similarityGroups(
+          algorithmVersion: similarityAlgorithmVersion + 1,
+          maxDistance: similarityMaxDistance,
+        ),
+        isNull,
+      );
+
+      await store.upsertMediaPage([photos[2]], 2);
+      await store.finishScan(2);
+
+      expect(
+        await store.similarityGroups(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test('a valid group snapshot opens without reading thumbnails', () async {
+    final store = await AppStore.open(path: inMemoryDatabasePath);
+    addTearDown(store.close);
+    final photos = [
+      for (var index = 0; index < 2; index++)
+        MediaRecord(
+          id: 'photo-$index',
+          takenAt: 2 - index,
+          modifiedAt: 10,
+          width: 100,
+          height: 80,
+          month: '2026-10',
+          type: 1,
+          duration: 0,
+          screenshot: false,
+          selfie: false,
+          live: false,
+        ),
+    ];
+    await store.upsertMediaPage(photos, 1);
+    await store.finishScan(1);
+    for (final photo in photos) {
+      await store.saveSimilarityHash(
+        photo,
+        photo.id == 'photo-0' ? '0000000000000000' : '0000000000000001',
+        algorithmVersion: similarityAlgorithmVersion,
+      );
+    }
+    await store.replaceSimilarityGroups(
+      [
+        ['photo-0', 'photo-1'],
+      ],
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
+    final repository = CountingThumbnailRepository();
+
+    final groups = await repository.findSimilarPhotos(store, (_, _) {});
+
+    expect(groups.single.items.map((item) => item.id), ['photo-0', 'photo-1']);
+    expect(repository.thumbnailRequests, 0);
   });
 
   test('deleting a pending item removes it from the pending list', () async {
@@ -304,13 +550,35 @@ void main() {
         live: false,
       );
       await store.upsertMediaPage([photo, video], 1);
-      await store.saveSimilarityHash('photo', '0000000000000000');
-      await store.saveSimilarityHash('missing', 'ffffffffffffffff');
+      await store.saveSimilarityHash(
+        photo,
+        '0000000000000000',
+        algorithmVersion: similarityAlgorithmVersion,
+      );
+      await store.saveSimilarityHash(
+        const MediaRecord(
+          id: 'missing',
+          takenAt: 0,
+          month: '2026-10',
+          type: 1,
+          duration: 0,
+          screenshot: false,
+          selfie: false,
+          live: false,
+        ),
+        'ffffffffffffffff',
+        algorithmVersion: similarityAlgorithmVersion,
+      );
 
       expect((await store.photoRecords()).map((item) => item.id), ['photo']);
       await store.upsertMediaPage([photo], 2);
       await store.finishScan(2);
-      expect(await store.similarityHashes(), {'photo': '0000000000000000'});
+      expect(
+        await store.similarityHashes(
+          algorithmVersion: similarityAlgorithmVersion,
+        ),
+        {'photo': '0000000000000000'},
+      );
     },
   );
 }

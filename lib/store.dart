@@ -4,6 +4,9 @@ class MediaRecord {
   const MediaRecord({
     required this.id,
     required this.takenAt,
+    this.modifiedAt = 0,
+    this.width = 0,
+    this.height = 0,
     required this.month,
     required this.type,
     required this.duration,
@@ -14,6 +17,9 @@ class MediaRecord {
 
   final String id;
   final int takenAt;
+  final int modifiedAt;
+  final int width;
+  final int height;
   final String month;
   final int type; // 1=image, 2=video
   final int duration;
@@ -24,6 +30,9 @@ class MediaRecord {
   factory MediaRecord.fromMap(Map<String, Object?> row) => MediaRecord(
     id: row['id'] as String,
     takenAt: row['taken_at'] as int,
+    modifiedAt: row['modified_at'] as int,
+    width: row['width'] as int,
+    height: row['height'] as int,
     month: row['month'] as String,
     type: row['type'] as int,
     duration: row['duration'] as int,
@@ -35,6 +44,9 @@ class MediaRecord {
   Map<String, Object?> toMap(int scanId) => {
     'id': id,
     'taken_at': takenAt,
+    'modified_at': modifiedAt,
+    'width': width,
+    'height': height,
     'month': month,
     'type': type,
     'duration': duration,
@@ -134,14 +146,16 @@ class AppStore {
     final base = path == null ? await getDatabasesPath() : null;
     final db = await openDatabase(
       path ?? '$base/album_cleaner.db',
-      version: 3,
+      version: 4,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE media_cache (
             id TEXT PRIMARY KEY, taken_at INTEGER NOT NULL, month TEXT NOT NULL,
             type INTEGER NOT NULL, duration INTEGER NOT NULL,
             screenshot INTEGER NOT NULL, selfie INTEGER NOT NULL,
-            live INTEGER NOT NULL, last_seen_at INTEGER NOT NULL
+            live INTEGER NOT NULL, last_seen_at INTEGER NOT NULL,
+            modified_at INTEGER NOT NULL, width INTEGER NOT NULL,
+            height INTEGER NOT NULL
           )''');
         await db.execute(
           'CREATE INDEX media_order ON media_cache(taken_at DESC, id DESC)',
@@ -165,7 +179,13 @@ class AppStore {
         await db.execute('''CREATE TABLE media_favorite (
           media_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)''');
         await db.execute('''CREATE TABLE media_similarity (
-          media_id TEXT PRIMARY KEY, hash TEXT NOT NULL)''');
+          media_id TEXT PRIMARY KEY, hash TEXT NOT NULL,
+          modified_at INTEGER NOT NULL, width INTEGER NOT NULL,
+          height INTEGER NOT NULL, algorithm_version INTEGER NOT NULL)''');
+        await db.execute('''CREATE TABLE media_similarity_group (
+          media_id TEXT PRIMARY KEY, group_order INTEGER NOT NULL,
+          member_order INTEGER NOT NULL, algorithm_version INTEGER NOT NULL,
+          max_distance INTEGER NOT NULL, generated_at INTEGER NOT NULL)''');
         await db.execute(
           '''CREATE TABLE app_settings (
           key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)''',
@@ -179,6 +199,26 @@ class AppStore {
         if (oldVersion < 3) {
           await db.execute('''CREATE TABLE media_similarity (
             media_id TEXT PRIMARY KEY, hash TEXT NOT NULL)''');
+        }
+        if (oldVersion < 4) {
+          await db.execute(
+            'ALTER TABLE media_cache ADD COLUMN modified_at INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute(
+            'ALTER TABLE media_cache ADD COLUMN width INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute(
+            'ALTER TABLE media_cache ADD COLUMN height INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute('DROP TABLE media_similarity');
+          await db.execute('''CREATE TABLE media_similarity (
+            media_id TEXT PRIMARY KEY, hash TEXT NOT NULL,
+            modified_at INTEGER NOT NULL, width INTEGER NOT NULL,
+            height INTEGER NOT NULL, algorithm_version INTEGER NOT NULL)''');
+          await db.execute('''CREATE TABLE media_similarity_group (
+            media_id TEXT PRIMARY KEY, group_order INTEGER NOT NULL,
+            member_order INTEGER NOT NULL, algorithm_version INTEGER NOT NULL,
+            max_distance INTEGER NOT NULL, generated_at INTEGER NOT NULL)''');
         }
       },
     );
@@ -225,6 +265,9 @@ class AppStore {
     await db.rawDelete(
       'DELETE FROM media_similarity WHERE media_id NOT IN (SELECT id FROM media_cache)',
     );
+    await db.rawDelete(
+      'DELETE FROM media_similarity_group WHERE media_id NOT IN (SELECT id FROM media_cache)',
+    );
   }
 
   Future<List<MediaRecord>> photoRecords() async {
@@ -236,19 +279,98 @@ class AppStore {
     return rows.map(MediaRecord.fromMap).toList();
   }
 
-  Future<Map<String, String>> similarityHashes() async {
-    final rows = await db.query('media_similarity');
+  Future<Map<String, String>> similarityHashes({
+    required int algorithmVersion,
+  }) async {
+    final rows = await db.rawQuery(
+      '''SELECT s.media_id, s.hash FROM media_similarity s
+      INNER JOIN media_cache m ON m.id = s.media_id
+      WHERE s.algorithm_version = ? AND s.modified_at = m.modified_at
+      AND s.width = m.width AND s.height = m.height''',
+      [algorithmVersion],
+    );
     return {
       for (final row in rows) row['media_id'] as String: row['hash'] as String,
     };
   }
 
-  Future<void> saveSimilarityHash(String mediaId, String hash) => db
+  Future<void> saveSimilarityHash(
+    MediaRecord media,
+    String hash, {
+    required int algorithmVersion,
+  }) => db
       .insert('media_similarity', {
-        'media_id': mediaId,
+        'media_id': media.id,
         'hash': hash,
+        'modified_at': media.modifiedAt,
+        'width': media.width,
+        'height': media.height,
+        'algorithm_version': algorithmVersion,
       }, conflictAlgorithm: ConflictAlgorithm.replace)
       .then((_) {});
+
+  String _similarityGroupSettingKey(int algorithmVersion, int maxDistance) =>
+      'similarity_groups:$algorithmVersion:$maxDistance';
+
+  Future<List<List<String>>?> similarityGroups({
+    required int algorithmVersion,
+    required int maxDistance,
+  }) async {
+    final key = _similarityGroupSettingKey(algorithmVersion, maxDistance);
+    if (await setting(key) == null) return null;
+    final rows = await db.rawQuery(
+      '''SELECT g.group_order, g.member_order, g.media_id
+      FROM media_similarity_group g
+      INNER JOIN media_cache m ON m.id = g.media_id
+      WHERE g.algorithm_version = ? AND g.max_distance = ?
+      ORDER BY g.group_order, g.member_order''',
+      [algorithmVersion, maxDistance],
+    );
+    final groups = <int, List<String>>{};
+    for (final row in rows) {
+      groups
+          .putIfAbsent(row['group_order'] as int, () => [])
+          .add(row['media_id'] as String);
+    }
+    return groups.values.where((group) => group.length > 1).toList();
+  }
+
+  Future<void> replaceSimilarityGroups(
+    List<List<String>> groups, {
+    required int algorithmVersion,
+    required int maxDistance,
+  }) => db.transaction((txn) async {
+    await txn.delete('media_similarity_group');
+    await txn.delete(
+      'app_settings',
+      where: 'key LIKE ?',
+      whereArgs: ['similarity_groups:%'],
+    );
+    final generatedAt = DateTime.now().millisecondsSinceEpoch;
+    final batch = txn.batch();
+    for (var groupOrder = 0; groupOrder < groups.length; groupOrder++) {
+      for (
+        var memberOrder = 0;
+        memberOrder < groups[groupOrder].length;
+        memberOrder++
+      ) {
+        batch.insert('media_similarity_group', {
+          'media_id': groups[groupOrder][memberOrder],
+          'group_order': groupOrder,
+          'member_order': memberOrder,
+          'algorithm_version': algorithmVersion,
+          'max_distance': maxDistance,
+          'generated_at': generatedAt,
+        });
+      }
+    }
+    await batch.commit(noResult: true);
+    await txn.insert('app_settings', {
+      'key': _similarityGroupSettingKey(algorithmVersion, maxDistance),
+      'value': generatedAt.toString(),
+      'updated_at': generatedAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  });
 
   Future<List<(String, int)>> months() async {
     final rows = await db.rawQuery('''SELECT month, COUNT(*) AS total

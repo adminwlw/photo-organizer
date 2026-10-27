@@ -3054,6 +3054,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   int processed = 0;
   int total = 0;
   bool failed = false;
+  bool refreshing = false;
 
   @override
   void initState() {
@@ -3063,12 +3064,16 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
 
   Future<void> _load() async {
     setState(() {
-      groups = null;
       failed = false;
+      refreshing = true;
       processed = 0;
       total = 0;
     });
     try {
+      final cached = await widget.app.media.cachedSimilarPhotos(
+        widget.app.store,
+      );
+      if (mounted && cached != null) setState(() => groups = cached);
       final result = await widget.app.media.findSimilarPhotos(
         widget.app.store,
         (value, maximum) {
@@ -3079,9 +3084,19 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
           });
         },
       );
-      if (mounted) setState(() => groups = result);
+      if (mounted) {
+        setState(() {
+          groups = result;
+          refreshing = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => failed = true);
+      if (mounted) {
+        setState(() {
+          failed = true;
+          refreshing = false;
+        });
+      }
     }
   }
 
@@ -3117,10 +3132,85 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
     ),
   );
 
+  Widget _results() => Column(
+    children: [
+      if (refreshing) ...[
+        const LinearProgressIndicator(minHeight: 2),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+          child: Text(
+            total == 0 ? '正在检查新增或修改的照片' : '正在更新 $processed / $total 张',
+            style: const TextStyle(color: _secondaryLabel, fontSize: 12),
+          ),
+        ),
+      ],
+      if (failed)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+          child: Row(
+            children: [
+              const Expanded(child: Text('更新失败，当前显示上次结果')),
+              TextButton(onPressed: _load, child: const Text('重试')),
+            ],
+          ),
+        ),
+      Expanded(
+        child: groups!.isEmpty
+            ? const Center(child: Text('暂未发现相似照片'))
+            : ListView.separated(
+                key: const Key('similar-groups'),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                itemCount: groups!.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 22),
+                itemBuilder: (context, groupIndex) {
+                  final group = groups![groupIndex];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '第 ${groupIndex + 1} 组 · ${group.items.length} 张',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 116,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: group.items.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final item = group.items[index];
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
+                              child: InkWell(
+                                key: ValueKey('similar-${item.id}'),
+                                onTap: () => _review(group, index),
+                                child: SizedBox.square(
+                                  dimension: 116,
+                                  child: MediaThumb(widget.app.media, item.id),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: const _FloatingGlassAppBar(title: Text('相似照片')),
-    body: failed
+    body: groups != null
+        ? _results()
+        : failed
         ? Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -3131,54 +3221,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
               ],
             ),
           )
-        : groups == null
-        ? _loading()
-        : groups!.isEmpty
-        ? const Center(child: Text('暂未发现相似照片'))
-        : ListView.separated(
-            key: const Key('similar-groups'),
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-            itemCount: groups!.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 22),
-            itemBuilder: (context, groupIndex) {
-              final group = groups![groupIndex];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '第 ${groupIndex + 1} 组 · ${group.items.length} 张',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 116,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: group.items.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (context, index) {
-                        final item = group.items[index];
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: InkWell(
-                            key: ValueKey('similar-${item.id}'),
-                            onTap: () => _review(group, index),
-                            child: SizedBox.square(
-                              dimension: 116,
-                              child: MediaThumb(widget.app.media, item.id),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+        : _loading(),
   );
 }
 

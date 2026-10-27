@@ -1,10 +1,15 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:photo_manager/photo_manager.dart';
 
 import 'store.dart';
+
+// Bump when fingerprint or grouping semantics change.
+const similarityAlgorithmVersion = 2;
+const similarityMaxDistance = 6;
 
 enum SystemAlbumGroup { album, people, smart }
 
@@ -203,8 +208,14 @@ class SimilarPhotoGroup {
 }
 
 int photoHashDistance(String left, String right) {
-  var difference =
-      BigInt.parse(left, radix: 16) ^ BigInt.parse(right, radix: 16);
+  return _photoHashBitDistance(
+    BigInt.parse(left, radix: 16),
+    BigInt.parse(right, radix: 16),
+  );
+}
+
+int _photoHashBitDistance(BigInt left, BigInt right) {
+  var difference = left ^ right;
   var distance = 0;
   while (difference != BigInt.zero) {
     difference &= difference - BigInt.one;
@@ -215,22 +226,89 @@ int photoHashDistance(String left, String right) {
 
 List<List<String>> groupSimilarPhotoHashes(
   Map<String, String> hashes, {
-  int maxDistance = 6,
+  int maxDistance = similarityMaxDistance,
 }) {
-  final groups = <List<String>>[];
-  for (final entry in hashes.entries) {
-    final group = groups.where(
-      (candidate) =>
-          photoHashDistance(entry.value, hashes[candidate.first]!) <=
-          maxDistance,
-    );
-    if (group.isEmpty) {
-      groups.add([entry.key]);
+  if (maxDistance < 0 || maxDistance > 7) {
+    throw ArgumentError.value(maxDistance, 'maxDistance', 'must be 0 to 7');
+  }
+  final entries =
+      hashes.entries
+          .where((entry) => entry.value.length == 16)
+          .map((entry) => (entry.key, BigInt.tryParse(entry.value, radix: 16)))
+          .where((entry) => entry.$2 != null)
+          .map((entry) => (entry.$1, entry.$2!))
+          .toList()
+        ..sort((left, right) => left.$1.compareTo(right.$1));
+  if (entries.length < 2) return const [];
+
+  final parent = List<int>.generate(entries.length, (index) => index);
+  final rank = List<int>.filled(entries.length, 0);
+  int root(int index) {
+    while (parent[index] != index) {
+      parent[index] = parent[parent[index]];
+      index = parent[index];
+    }
+    return index;
+  }
+
+  void union(int left, int right) {
+    final leftRoot = root(left);
+    final rightRoot = root(right);
+    if (leftRoot == rightRoot) return;
+    if (rank[leftRoot] < rank[rightRoot]) {
+      parent[leftRoot] = rightRoot;
+    } else if (rank[leftRoot] > rank[rightRoot]) {
+      parent[rightRoot] = leftRoot;
     } else {
-      group.first.add(entry.key);
+      parent[rightRoot] = leftRoot;
+      rank[leftRoot]++;
     }
   }
-  return groups.where((group) => group.length > 1).toList();
+
+  final exactRepresentatives = <BigInt, int>{};
+  if (maxDistance == 0) {
+    for (var index = 0; index < entries.length; index++) {
+      final previous = exactRepresentatives[entries[index].$2];
+      if (previous == null) {
+        exactRepresentatives[entries[index].$2] = index;
+      } else {
+        union(index, previous);
+      }
+    }
+  } else {
+    final buckets = List.generate(8, (_) => <int, List<int>>{});
+    for (var index = 0; index < entries.length; index++) {
+      final hash = entries[index].$2;
+      final exact = exactRepresentatives[hash];
+      if (exact != null) {
+        union(index, exact);
+        continue;
+      }
+      exactRepresentatives[hash] = index;
+      final candidates = <int>{};
+      for (var band = 0; band < 8; band++) {
+        final value = ((hash >> (band * 8)) & BigInt.from(0xff)).toInt();
+        candidates.addAll(buckets[band][value] ?? const []);
+      }
+      for (final candidate in candidates) {
+        if (_photoHashBitDistance(hash, entries[candidate].$2) <= maxDistance) {
+          union(index, candidate);
+        }
+      }
+      for (var band = 0; band < 8; band++) {
+        final value = ((hash >> (band * 8)) & BigInt.from(0xff)).toInt();
+        buckets[band].putIfAbsent(value, () => []).add(index);
+      }
+    }
+  }
+
+  final groups = <int, List<String>>{};
+  for (var index = 0; index < entries.length; index++) {
+    groups.putIfAbsent(root(index), () => []).add(entries[index].$1);
+  }
+  final result = groups.values.where((group) => group.length > 1).toList();
+  result.sort((left, right) => left.first.compareTo(right.first));
+  return result;
 }
 
 class MediaRepository {
@@ -324,6 +402,7 @@ class MediaRepository {
     bool selfie = false,
   }) {
     final seconds = asset.createDateSecond ?? asset.modifiedDateSecond ?? 0;
+    final modifiedSeconds = asset.modifiedDateSecond ?? 0;
     final time = seconds > 0 ? seconds * 1000 : 0;
     final date = time == 0 ? null : DateTime.fromMillisecondsSinceEpoch(time);
     final month = date == null
@@ -332,6 +411,9 @@ class MediaRepository {
     return MediaRecord(
       id: asset.id,
       takenAt: time,
+      modifiedAt: modifiedSeconds > 0 ? modifiedSeconds * 1000 : 0,
+      width: asset.width,
+      height: asset.height,
       month: month,
       type: asset.type == AssetType.video ? 2 : 1,
       duration: asset.duration,
@@ -578,11 +660,20 @@ class MediaRepository {
     void Function(int, int) onProgress,
   ) async {
     final photos = await store.photoRecords();
-    final hashes = await store.similarityHashes();
+    final hashes = await store.similarityHashes(
+      algorithmVersion: similarityAlgorithmVersion,
+    );
+    final cachedGroups = await store.similarityGroups(
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
     final missing = photos.where((photo) => !hashes.containsKey(photo.id));
     final missingPhotos = missing.toList();
     var processed = photos.length - missingPhotos.length;
     onProgress(processed, photos.length);
+    if (missingPhotos.isEmpty && cachedGroups != null) {
+      return _similarPhotoGroups(photos, cachedGroups);
+    }
     for (var start = 0; start < missingPhotos.length; start += 8) {
       final batch = missingPhotos.skip(start).take(8).toList();
       final values = await Future.wait(
@@ -598,28 +689,83 @@ class MediaRepository {
         final hash = values[index];
         if (hash == null) continue;
         hashes[batch[index].id] = hash;
-        await store.saveSimilarityHash(batch[index].id, hash);
+        await store.saveSimilarityHash(
+          batch[index],
+          hash,
+          algorithmVersion: similarityAlgorithmVersion,
+        );
       }
       processed += batch.length;
       onProgress(processed, photos.length);
     }
-    final records = {for (final photo in photos) photo.id: photo};
     final orderedHashes = {
       for (final photo in photos) photo.id: ?hashes[photo.id],
     };
-    return groupSimilarPhotoHashes(orderedHashes)
-        .map((ids) => SimilarPhotoGroup([for (final id in ids) ?records[id]]))
-        .toList();
+    final groups = await Isolate.run(
+      () => groupSimilarPhotoHashes(
+        orderedHashes,
+        maxDistance: similarityMaxDistance,
+      ),
+    );
+    await store.replaceSimilarityGroups(
+      groups,
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
+    return _similarPhotoGroups(photos, groups);
   }
 
   Future<int> cachedSimilarPhotoCount(AppStore store) async {
+    final cachedGroups = await store.similarityGroups(
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
+    if (cachedGroups != null) {
+      return cachedGroups.fold<int>(0, (total, group) => total + group.length);
+    }
     final photos = await store.photoRecords();
-    final hashes = await store.similarityHashes();
+    final hashes = await store.similarityHashes(
+      algorithmVersion: similarityAlgorithmVersion,
+    );
     final cachedHashes = {
       for (final photo in photos) photo.id: ?hashes[photo.id],
     };
-    return groupSimilarPhotoHashes(cachedHashes)
+    return (await Isolate.run(() => groupSimilarPhotoHashes(cachedHashes)))
         .fold<int>(0, (total, group) => total + group.length);
+  }
+
+  Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async {
+    final groups = await store.similarityGroups(
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
+    if (groups == null) return null;
+    return _similarPhotoGroups(await store.photoRecords(), groups);
+  }
+
+  List<SimilarPhotoGroup> _similarPhotoGroups(
+    List<MediaRecord> photos,
+    List<List<String>> groups,
+  ) {
+    final records = {for (final photo in photos) photo.id: photo};
+    final order = {
+      for (var index = 0; index < photos.length; index++)
+        photos[index].id: index,
+    };
+    final result = groups
+        .map(
+          (ids) => [
+            for (final id in ids) ?records[id],
+          ]..sort((left, right) => order[left.id]!.compareTo(order[right.id]!)),
+        )
+        .where((items) => items.length > 1)
+        .map(SimilarPhotoGroup.new)
+        .toList();
+    result.sort(
+      (left, right) =>
+          order[left.items.first.id]!.compareTo(order[right.items.first.id]!),
+    );
+    return result;
   }
 
   Future<File?> videoFile(String id) async {

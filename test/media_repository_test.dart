@@ -28,6 +28,41 @@ void main() {
     );
   });
 
+  test('similar hash groups are transitive and input-order independent', () {
+    final forward = groupSimilarPhotoHashes({
+      'a': '0000000000000000',
+      'b': '0000000000000001',
+      'c': '0000000000000003',
+      'single': 'ffffffffffffffff',
+    }, maxDistance: 1);
+    final reversed = groupSimilarPhotoHashes({
+      'single': 'ffffffffffffffff',
+      'c': '0000000000000003',
+      'b': '0000000000000001',
+      'a': '0000000000000000',
+    }, maxDistance: 1);
+
+    expect(forward, [
+      ['a', 'b', 'c'],
+    ]);
+    expect(reversed, forward);
+  });
+
+  test('band index handles a large mostly-unique library', () {
+    final hashes = <String, String>{};
+    final mask = (BigInt.one << 64) - BigInt.one;
+    var value = BigInt.one;
+    for (var index = 0; index < 10000; index++) {
+      value =
+          (value * BigInt.parse('6364136223846793005') +
+              BigInt.parse('1442695040888963407')) &
+          mask;
+      hashes['photo-$index'] = value.toRadixString(16).padLeft(16, '0');
+    }
+
+    expect(groupSimilarPhotoHashes(hashes), isEmpty);
+  });
+
   test('iOS exposes every user-visible PhotoKit smart category', () {
     final expected = {
       PMDarwinAssetCollectionSubtype.smartAlbumPanoramas:
