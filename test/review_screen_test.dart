@@ -1496,7 +1496,14 @@ void main() {
     );
     expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
     expect(allMediaSize.height, inInclusiveRange(180, 200));
-    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 84);
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
+    final reviewHeroInk = tester.widget<Ink>(
+      find.descendant(
+        of: find.byKey(const Key('review-hero')),
+        matching: find.byType(Ink),
+      ),
+    );
+    expect((reviewHeroInk.decoration as BoxDecoration).gradient, isNotNull);
     expect(find.text('整理进度'), findsNothing);
     expect(find.text('待删除队列'), findsNothing);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
@@ -1583,7 +1590,9 @@ void main() {
     expect(find.byKey(const ValueKey('section-待删除')), findsNothing);
   });
 
-  testWidgets('all media cover uses a calm four-photo grid', (tester) async {
+  testWidgets('all media cover uses the selected four-photo art composition', (
+    tester,
+  ) async {
     final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
@@ -1610,11 +1619,11 @@ void main() {
     final bottomRight = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-3')),
     );
-    expect(topLeft.top, moreOrLessEquals(topRight.top, epsilon: 0.1));
-    expect(topRight.left, greaterThan(topLeft.right));
+    expect(topLeft.top, greaterThan(topRight.top));
     expect(bottomLeft.top, greaterThan(topRight.bottom));
-    expect(bottomRight.top, moreOrLessEquals(bottomLeft.top, epsilon: 0.1));
-    expect(bottomRight.left, greaterThan(bottomLeft.right));
+    expect(bottomRight.left, greaterThan(topLeft.left));
+    expect(bottomRight.left, lessThan(bottomLeft.left));
+    expect(find.text('立即清理'), findsOneWidget);
   });
 
   testWidgets('storage summary is reused and largest media types lead', (
@@ -2321,7 +2330,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('继续整理'), findsOneWidget);
     expect(find.text('回到上次位置'), findsNothing);
-    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 84);
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
 
     await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
     await tester.pumpAndSettle();

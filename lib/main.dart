@@ -1226,16 +1226,29 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Colors.transparent,
           child: InkWell(
             key: const Key('review-hero'),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(22),
             onTap: enabled
                 ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
                 : null,
             child: Ink(
-              height: 84,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 76,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: _secondarySystemBackground,
-                borderRadius: BorderRadius.circular(14),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF36A7F4),
+                    Color(0xFF3E77F7),
+                    Color(0xFF7565F2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x294663EF),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
@@ -1251,8 +1264,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: CircularProgressIndicator(
                             value: ratio,
                             strokeWidth: 4,
-                            backgroundColor: const Color(0x1A787880),
-                            color: _systemBlue,
+                            backgroundColor: const Color(0x55FFFFFF),
+                            color: Colors.white,
                           ),
                         ),
                         Container(
@@ -1260,15 +1273,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 42,
                           alignment: Alignment.center,
                           decoration: const BoxDecoration(
-                            color: Color(0xFFE5F2FF),
+                            color: Colors.white,
                             shape: BoxShape.circle,
                           ),
                           child: Text(
                             '$percent%',
                             style: const TextStyle(
-                              color: _systemBlue,
+                              color: Color(0xFF1557F8),
                               fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
@@ -1284,9 +1297,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           hasProgress ? '继续整理' : '开始整理',
                           style: const TextStyle(
-                            color: _primaryLabel,
+                            color: Colors.white,
                             fontSize: 17,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -1299,7 +1312,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: _secondaryLabel,
+                            color: Color(0xE6FFFFFF),
                             fontSize: 13,
                             height: 1.3,
                           ),
@@ -1312,12 +1325,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: const Color(0x14787880),
+                      color: enabled ? Colors.white : const Color(0x99FFFFFF),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.arrow_forward_rounded,
-                      color: _systemBlue,
+                      color: Color(0xFF3158E6),
                       size: 24,
                     ),
                   ),
@@ -1488,40 +1501,59 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
 
-    Widget frame(int index) =>
-        ClipRRect(borderRadius: BorderRadius.circular(3), child: tile(index));
+    Widget frame(int index, double angle) => Transform.rotate(
+      angle: angle,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x260F2D67),
+              blurRadius: 12,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: tile(index),
+        ),
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) => Stack(
-        clipBehavior: Clip.hardEdge,
+        clipBehavior: Clip.none,
         children: [
           Positioned(
-            left: 0,
-            top: 0,
-            width: constraints.maxWidth * 0.5 - 1,
-            height: constraints.maxHeight * 0.5 - 1,
-            child: frame(0),
+            left: 2,
+            top: 15,
+            width: constraints.maxWidth * 0.56,
+            height: constraints.maxHeight * 0.72,
+            child: frame(0, -0.045),
+          ),
+          Positioned(
+            right: 2,
+            top: 1,
+            width: constraints.maxWidth * 0.46,
+            height: constraints.maxHeight * 0.48,
+            child: frame(1, 0.055),
           ),
           Positioned(
             right: 0,
-            top: 0,
-            width: constraints.maxWidth * 0.5 - 1,
-            height: constraints.maxHeight * 0.5 - 1,
-            child: frame(1),
+            bottom: 1,
+            width: constraints.maxWidth * 0.47,
+            height: constraints.maxHeight * 0.45,
+            child: frame(2, -0.035),
           ),
           Positioned(
-            left: 0,
-            bottom: 0,
-            width: constraints.maxWidth * 0.5 - 1,
-            height: constraints.maxHeight * 0.5 - 1,
-            child: frame(2),
-          ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            width: constraints.maxWidth * 0.5 - 1,
-            height: constraints.maxHeight * 0.5 - 1,
-            child: frame(3),
+            left: constraints.maxWidth * 0.36,
+            bottom: 4,
+            width: constraints.maxWidth * 0.29,
+            height: constraints.maxHeight * 0.42,
+            child: frame(3, 0.08),
           ),
         ],
       ),
@@ -1535,14 +1567,15 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.transparent,
       child: InkWell(
         key: const ValueKey('category-all'),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(22),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
         child: Ink(
           height: 188,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: _secondarySystemBackground,
-            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xEFFFFFFF),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFDCE5F7)),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -1554,7 +1587,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(
                     width: coverWidth,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(14),
                       child: FutureBuilder<List<MediaRecord>>(
                         future: allMediaCover,
                         builder: (context, snapshot) =>
@@ -1567,21 +1600,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.photo_library_outlined,
-                          color: _systemBlue,
-                          size: 24,
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4F1FF),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Icon(
+                            Icons.photo_library_outlined,
+                            color: Color(0xFF4D51EE),
+                            size: 20,
+                          ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 5),
                         const Text(
                           '全部照片与视频',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: _primaryLabel,
-                            fontSize: 17,
+                            color: Color(0xFF111A35),
+                            fontSize: 16,
                             height: 1.16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -1590,25 +1631,48 @@ class _HomeScreenState extends State<HomeScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: _secondaryLabel,
-                            fontSize: 13,
+                            color: Color(0xFF6E7892),
+                            fontSize: 11,
                           ),
                         ),
                         const Spacer(),
                         Text(
                           count.hasData ? '${count.data} 项' : '读取中',
                           style: const TextStyle(
-                            color: _secondaryLabel,
-                            fontSize: 15,
+                            color: Color(0xFF245BF0),
+                            fontSize: 18,
                             height: 1,
-                            fontWeight: FontWeight.w400,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: _systemBlue,
-                          size: 22,
+                        const SizedBox(height: 5),
+                        Container(
+                          height: 34,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF0FF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFB8C9F4)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '立即清理',
+                                style: TextStyle(
+                                  color: Color(0xFF1746B6),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              SizedBox(width: 3),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Color(0xFF1746B6),
+                                size: 17,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
