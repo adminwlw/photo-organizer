@@ -172,6 +172,26 @@ class DelayedActionStore extends UndoAppStore {
   ) => actionResult.future;
 }
 
+class DelayedQueueActionStore extends UndoAppStore {
+  DelayedQueueActionStore(super.db);
+
+  final actionResult = Completer<ActionSnapshot?>();
+
+  @override
+  Future<ActionSnapshot?> act(
+    Scope scope,
+    MediaRecord media,
+    ReviewAction action,
+  ) => actionResult.future;
+
+  void completeDelete(Scope scope, MediaRecord media) {
+    queued++;
+    actionResult.complete(
+      ActionSnapshot(media.id, scope.key, null, null, const [], null),
+    );
+  }
+}
+
 class ScopeAppStore extends UndoAppStore {
   ScopeAppStore(super.db);
 
@@ -1412,6 +1432,50 @@ void main() {
     expect(find.byKey(const Key('open-review')), findsOneWidget);
   });
 
+  testWidgets('system back during the final action still offers the queue', (
+    tester,
+  ) async {
+    final store = DelayedQueueActionStore(database);
+    final app = CleanerState(store, FakeMediaRepository());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              key: const Key('open-review'),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ReviewScreen(app, Scope.all, source: const [photo]),
+                ),
+              ),
+              child: const Text('打开整理'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-review')));
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('photo'))),
+    );
+    await gesture.moveBy(const Offset(0, -100));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byType(ReviewScreen), findsOneWidget);
+
+    store.completeDelete(Scope.all, photo);
+    await tester.pumpAndSettle();
+    expect(find.text('别忘了删除照片'), findsOneWidget);
+  });
+
   testWidgets('home follows the selected hero and stacked category layout', (
     tester,
   ) async {
@@ -2297,6 +2361,43 @@ void main() {
       await tester.tapAt(point);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('favorite-control')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'filmstrip center follows scrolling with compact zero-gap tiles',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReviewScreen(
+            CleanerState(FakeAppStore(database), FakeMediaRepository()),
+            Scope.all,
+            initialIndex: 1,
+            source: const [photo, nextPhoto, thirdPhoto],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final first = find.byKey(const ValueKey('review-filmstrip-tile-photo'));
+      final selected = find.byKey(
+        const ValueKey('review-filmstrip-tile-next-photo'),
+      );
+      final third = find.byKey(
+        const ValueKey('review-filmstrip-tile-third-photo'),
+      );
+      expect(tester.getSize(first), const Size(36, 40));
+      expect(tester.getSize(selected), const Size(42, 46));
+      expect(tester.getTopRight(first).dx, tester.getTopLeft(selected).dx);
+      expect(tester.getTopRight(selected).dx, tester.getTopLeft(third).dx);
+
+      await tester.drag(
+        find.byKey(const Key('review-filmstrip')),
+        const Offset(-36, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('3 / 3'), findsOneWidget);
+      expect(find.byKey(const ValueKey('third-photo')), findsOneWidget);
     },
   );
 

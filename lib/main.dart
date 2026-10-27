@@ -4113,6 +4113,8 @@ class _ReviewScreenState extends State<ReviewScreen>
   static const _horizontalFlingDistance = 24.0;
   static const _verticalFlingDistance = 32.0;
   static const _verticalActionDistance = 76.0;
+  static const _filmstripItemWidth = 36.0;
+  static const _filmstripSelectedWidth = 42.0;
 
   int index = 0;
   int total = 0;
@@ -4129,6 +4131,9 @@ class _ReviewScreenState extends State<ReviewScreen>
   final Map<String, Future<Size?>> mediaSizeCache = {};
   final Map<int, Future<MediaRecord?>> filmstripItemCache = {};
   final ScrollController filmstripController = ScrollController();
+  bool filmstripUserScrolling = false;
+  bool filmstripSelecting = false;
+  int filmstripSelectionRequest = 0;
   int queueCount = 0;
   final List<ActionSnapshot> undoHistory = [];
   bool currentFavorite = false;
@@ -4150,6 +4155,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   late Animation<double> scaleAnimation;
   bool exitPromptOpen = false;
   bool exitPromptBypassed = false;
+  bool exitRequestedWhileBusy = false;
   OverlayEntry? edgeNotice;
   String? edgeNoticeMessage;
   Timer? edgeNoticeTimer;
@@ -4372,7 +4378,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !filmstripController.hasClients) return;
       final position = filmstripController.position;
-      final target = (index * 58.0 - position.viewportDimension / 2 + 29).clamp(
+      final target = (index * _filmstripItemWidth).clamp(
         0.0,
         position.maxScrollExtent,
       );
@@ -4382,6 +4388,92 @@ class _ReviewScreenState extends State<ReviewScreen>
         curve: Curves.easeOutCubic,
       );
     });
+  }
+
+  int _filmstripIndexAt(double offset) => total == 0
+      ? 0
+      : (offset / _filmstripItemWidth).round().clamp(0, total - 1);
+
+  bool _handleFilmstripScroll(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      filmstripUserScrolling = notification.dragDetails != null;
+    }
+    if (filmstripUserScrolling && notification is ScrollUpdateNotification) {
+      unawaited(
+        _selectFromFilmstrip(_filmstripIndexAt(notification.metrics.pixels)),
+      );
+    }
+    if (filmstripUserScrolling && notification is ScrollEndNotification) {
+      filmstripUserScrolling = false;
+      final target = _filmstripIndexAt(notification.metrics.pixels);
+      filmstripController.animateTo(
+        target * _filmstripItemWidth,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    return false;
+  }
+
+  Future<void> _selectFromFilmstrip(int target) async {
+    if (target < 0 || target >= total || (busy && !filmstripSelecting)) return;
+    final request = ++filmstripSelectionRequest;
+    if (target == index) {
+      if (filmstripSelecting) {
+        filmstripSelecting = false;
+        _finishBusy();
+      }
+      return;
+    }
+    if (!filmstripSelecting) {
+      setState(() {
+        filmstripSelecting = true;
+        busy = true;
+      });
+    }
+    try {
+      final (loadedItem, loadedPreview) = await _loadAt(target);
+      if (loadedItem == null) return;
+      final loadedMediaSize = await _mediaSize(loadedItem.id, loadedPreview);
+      final loadedFavorite = await widget.app.store.isFavorite(loadedItem.id);
+      if (!mounted || request != filmstripSelectionRequest) return;
+      browseDirection = target > index ? 1 : -1;
+      setState(() {
+        index = target;
+        current = loadedItem;
+        currentPreview = loadedPreview;
+        currentMediaSize = loadedMediaSize;
+        currentFavorite = loadedFavorite;
+        incoming = null;
+        incomingPreview = null;
+        previousItem = null;
+        previousPreview = null;
+        nextItem = null;
+        nextPreview = null;
+        dragOffset = Offset.zero;
+        zoom = 1;
+        zoomOffset = Offset.zero;
+        actionScale = 1;
+        dragAxis = null;
+        panOffset = Offset.zero;
+      });
+      await widget.app.store.saveAnchor(widget.scope, loadedItem);
+      _prefetchAround(target);
+    } finally {
+      if (mounted && request == filmstripSelectionRequest) {
+        filmstripSelecting = false;
+        _finishBusy();
+      }
+    }
+  }
+
+  void _finishBusy() {
+    if (!mounted) return;
+    setState(() => busy = false);
+    if (exitRequestedWhileBusy) {
+      exitRequestedWhileBusy = false;
+      unawaited(_requestExit());
+    }
   }
 
   Future<Uint8List?> _previewFor(MediaRecord item) {
@@ -4547,7 +4639,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       _prefetchAround(index);
       _centerFilmstrip();
     } finally {
-      if (mounted) setState(() => busy = false);
+      _finishBusy();
     }
   }
 
@@ -4645,9 +4737,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       _prefetchAround(index);
       _centerFilmstrip();
     } finally {
-      if (mounted) {
-        setState(() => busy = false);
-      }
+      _finishBusy();
     }
   }
 
@@ -4717,9 +4807,9 @@ class _ReviewScreenState extends State<ReviewScreen>
         if (!mounted) return;
         final navigator = Navigator.of(context);
         if (navigator.canPop()) {
-          navigator.pop(current?.id);
+          await _exitReview();
         } else {
-          setState(() => busy = false);
+          _finishBusy();
           await _returnToCenter(velocity: speed.dy.abs());
         }
         return;
@@ -4856,7 +4946,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       if (index < 0) index = 0;
       await _load();
     } finally {
-      if (mounted) setState(() => busy = false);
+      _finishBusy();
     }
   }
 
@@ -4871,45 +4961,65 @@ class _ReviewScreenState extends State<ReviewScreen>
   }
 
   Future<void> _requestExit() async {
-    if (busy || exitPromptOpen) return;
-    if (current != null || queueCount == 0 || exitPromptBypassed) {
-      Navigator.pop(context, current?.id);
+    if (exitPromptOpen) return;
+    if (busy) {
+      exitRequestedWhileBusy = true;
       return;
     }
     exitPromptOpen = true;
-    final openQueue = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('别忘了删除照片'),
-        content: Text(
-          '本次整理已完成，待删除队列中还有 $queueCount 项照片或视频尚未最终删除。是否现在进入队列复核并删除？',
+    try {
+      final latestQueueCount = (await widget.app.store.queue()).length;
+      if (!mounted) return;
+      if (latestQueueCount != queueCount) {
+        setState(() => queueCount = latestQueueCount);
+      }
+      if (current != null || latestQueueCount == 0 || exitPromptBypassed) {
+        await _exitReview();
+        return;
+      }
+      final openQueue = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('别忘了删除照片'),
+          content: Text(
+            '本次整理已完成，待删除队列中还有 $latestQueueCount 项照片或视频尚未最终删除。是否现在进入队列复核并删除？',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('稍后再说'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('进入待删除队列'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('稍后再说'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('进入待删除队列'),
-          ),
-        ],
-      ),
-    );
-    exitPromptOpen = false;
+      );
+      if (!mounted) return;
+      if (openQueue == true) {
+        setState(() => exitPromptBypassed = true);
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => QueueScreen(widget.app)),
+        );
+      } else {
+        await _exitReview();
+      }
+    } finally {
+      exitPromptOpen = false;
+    }
+  }
+
+  Future<void> _exitReview() async {
     if (!mounted) return;
     setState(() => exitPromptBypassed = true);
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
-    if (openQueue == true) {
-      await Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => QueueScreen(widget.app)),
-      );
-    } else {
-      Navigator.pop(context, current?.id);
-    }
+    Navigator.pop(context, current?.id);
   }
 
   Widget _mediaStage(MediaRecord item) => GestureDetector(
@@ -4979,71 +5089,99 @@ class _ReviewScreenState extends State<ReviewScreen>
 
   Widget _filmstrip() => SizedBox(
     key: const Key('review-filmstrip'),
-    height: 62,
-    child: ListView.builder(
-      controller: filmstripController,
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 118),
-      itemCount: total,
-      itemBuilder: (context, target) => FutureBuilder<MediaRecord?>(
-        future: _filmstripItemAt(target),
-        builder: (context, snapshot) {
-          final media = snapshot.data;
-          final selected = target == index;
-          return GestureDetector(
-            key: media == null
-                ? ValueKey('review-filmstrip-$target')
-                : ValueKey('review-filmstrip-${media.id}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: media == null || selected || busy
-                ? null
-                : () => _move(target - index),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              width: selected ? 58 : 50,
-              height: selected ? 58 : 50,
-              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A3342),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? Colors.white : const Color(0x8899A7BC),
-                  width: selected ? 3 : 1,
-                ),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x33000000), blurRadius: 8),
-                ],
+    height: 46,
+    child: LayoutBuilder(
+      builder: (context, constraints) =>
+          NotificationListener<ScrollNotification>(
+            onNotification: _handleFilmstripScroll,
+            child: ListView.builder(
+              controller: filmstripController,
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              padding: EdgeInsets.symmetric(
+                horizontal:
+                    (constraints.maxWidth - _filmstripSelectedWidth) / 2,
               ),
-              clipBehavior: Clip.antiAlias,
-              child: media == null
-                  ? const Icon(Icons.image_outlined, color: Colors.white70)
-                  : Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        MediaThumb(
-                          widget.app.media,
-                          media.id,
-                          width: 120,
-                          height: 120,
-                        ),
-                        if (media.type == 2)
-                          const Center(
-                            child: Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 22,
-                              shadows: [
-                                Shadow(color: Colors.black, blurRadius: 6),
-                              ],
-                            ),
+              itemCount: total,
+              itemBuilder: (context, target) => FutureBuilder<MediaRecord?>(
+                future: _filmstripItemAt(target),
+                builder: (context, snapshot) {
+                  final media = snapshot.data;
+                  final selected = target == index;
+                  return GestureDetector(
+                    key: media == null
+                        ? ValueKey('review-filmstrip-$target')
+                        : ValueKey('review-filmstrip-${media.id}'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: media == null || selected || busy
+                        ? null
+                        : () {
+                            filmstripController.animateTo(
+                              target * _filmstripItemWidth,
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOutCubic,
+                            );
+                            unawaited(_selectFromFilmstrip(target));
+                          },
+                    child: Center(
+                      child: AnimatedContainer(
+                        key: media == null
+                            ? ValueKey('review-filmstrip-tile-$target')
+                            : ValueKey('review-filmstrip-tile-${media.id}'),
+                        duration: const Duration(milliseconds: 140),
+                        curve: Curves.easeOutCubic,
+                        width: selected
+                            ? _filmstripSelectedWidth
+                            : _filmstripItemWidth,
+                        height: selected ? 46 : 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A3342),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: selected
+                                ? Colors.white
+                                : const Color(0x8899A7BC),
+                            width: selected ? 2.5 : 1,
                           ),
-                      ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: media == null
+                            ? const Icon(
+                                Icons.image_outlined,
+                                color: Colors.white70,
+                              )
+                            : Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  MediaThumb(
+                                    widget.app.media,
+                                    media.id,
+                                    width: 96,
+                                    height: 96,
+                                  ),
+                                  if (media.type == 2)
+                                    const Center(
+                                      child: Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 18,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black,
+                                            blurRadius: 6,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
-          );
-        },
-      ),
+          ),
     ),
   );
 
@@ -5280,7 +5418,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       ),
     );
     return PopScope<Object?>(
-      canPop: item != null || queueCount == 0 || exitPromptBypassed,
+      canPop: exitPromptBypassed,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_requestExit());
       },
