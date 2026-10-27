@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:album_cleaner/media_repository.dart';
 import 'package:album_cleaner/store.dart';
 
 void main() {
@@ -69,6 +70,50 @@ void main() {
       expect(await store.reviewProgress(Scope.all), isNull);
     },
   );
+
+  test('cached similar count never hashes uncached photos', () async {
+    final store = await AppStore.open(path: inMemoryDatabasePath);
+    addTearDown(store.close);
+    const photos = [
+      MediaRecord(
+        id: 'a',
+        takenAt: 3,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+      MediaRecord(
+        id: 'b',
+        takenAt: 2,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+      MediaRecord(
+        id: 'uncached',
+        takenAt: 1,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+    ];
+    await store.upsertMediaPage(photos, 1);
+    await store.finishScan(1);
+    await store.saveSimilarityHash('a', '0000000000000000');
+    await store.saveSimilarityHash('b', '0000000000000001');
+
+    expect(await MediaRepository().cachedSimilarPhotoCount(store), 2);
+    expect(await store.similarityHashes(), hasLength(2));
+  });
 
   test('deleting a pending item removes it from the pending list', () async {
     final store = await AppStore.open(path: inMemoryDatabasePath);

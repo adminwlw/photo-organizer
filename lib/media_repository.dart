@@ -611,6 +611,16 @@ class MediaRepository {
         .toList();
   }
 
+  Future<int> cachedSimilarPhotoCount(AppStore store) async {
+    final photos = await store.photoRecords();
+    final hashes = await store.similarityHashes();
+    final cachedHashes = {
+      for (final photo in photos) photo.id: ?hashes[photo.id],
+    };
+    return groupSimilarPhotoHashes(cachedHashes)
+        .fold<int>(0, (total, group) => total + group.length);
+  }
+
   Future<File?> videoFile(String id) async {
     final asset = await get(id);
     if (asset?.type != AssetType.video) return null;

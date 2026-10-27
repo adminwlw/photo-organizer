@@ -24,6 +24,9 @@ class FakeMediaRepository extends MediaRepository {
   Future<List<SystemCategorySummary>> systemCategories() async => const [];
 
   @override
+  Future<int> cachedSimilarPhotoCount(AppStore store) async => 0;
+
+  @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
     void Function(int, int) onProgress,
@@ -49,6 +52,51 @@ class FakeMediaRepository extends MediaRepository {
   }
 }
 
+class StartupMediaRepository extends FakeMediaRepository {
+  final scanCompleter = Completer<void>();
+  int scanRequests = 0;
+  int albumRequests = 0;
+  int categoryRequests = 0;
+  int cachedSimilarityRequests = 0;
+  int fullSimilarityRequests = 0;
+
+  @override
+  Future<PermissionState> permission() async => PermissionState.authorized;
+
+  @override
+  Future<void> scan(AppStore store, void Function(int) onProgress) {
+    scanRequests++;
+    return scanCompleter.future;
+  }
+
+  @override
+  Future<List<SystemAlbumSummary>> systemAlbums() async {
+    albumRequests++;
+    return const [];
+  }
+
+  @override
+  Future<List<SystemCategorySummary>> systemCategories() async {
+    categoryRequests++;
+    return const [];
+  }
+
+  @override
+  Future<int> cachedSimilarPhotoCount(AppStore store) async {
+    cachedSimilarityRequests++;
+    return 0;
+  }
+
+  @override
+  Future<List<SimilarPhotoGroup>> findSimilarPhotos(
+    AppStore store,
+    void Function(int, int) onProgress,
+  ) async {
+    fullSimilarityRequests++;
+    return const [];
+  }
+}
+
 class AlbumsMediaRepository extends FakeMediaRepository {
   @override
   Future<List<SystemAlbumSummary>> systemAlbums() async => [
@@ -63,6 +111,9 @@ class AlbumsMediaRepository extends FakeMediaRepository {
 }
 
 class SimilarMediaRepository extends FakeMediaRepository {
+  @override
+  Future<int> cachedSimilarPhotoCount(AppStore store) async => 2;
+
   @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
@@ -229,6 +280,25 @@ class ScopeAppStore extends UndoAppStore {
     bool pendingOnly = false,
     bool unreviewedOnly = false,
   }) async => items.indexWhere((item) => item.id == mediaId);
+}
+
+class StartupAppStore extends ScopeAppStore {
+  StartupAppStore(super.db, {this.onboarded = true});
+
+  final bool onboarded;
+
+  @override
+  Future<String?> setting(String key) async => switch (key) {
+    'onboarded' => onboarded ? '1' : null,
+    'down_swipe_action' => 'returnToAlbum',
+    _ => null,
+  };
+
+  @override
+  Future<List<(String, int)>> months() async => const [('2026-10', 2)];
+
+  @override
+  Future<void> close() async {}
 }
 
 class SixMediaAppStore extends ScopeAppStore {
@@ -602,6 +672,55 @@ void main() {
   });
 
   tearDownAll(() => database.close());
+
+  testWidgets('bootstrap paints branding before the database opens', (
+    tester,
+  ) async {
+    final store = Completer<AppStore>();
+    await tester.pumpWidget(
+      BootstrapApp(
+        openStore: () => store.future,
+        createMedia: StartupMediaRepository.new,
+      ),
+    );
+
+    expect(find.byKey(const Key('startup-brand')), findsOneWidget);
+
+    store.complete(StartupAppStore(database, onboarded: false));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('onboarding-page-1')), findsOneWidget);
+  });
+
+  testWidgets('cached home paints while the startup scan continues', (
+    tester,
+  ) async {
+    final media = StartupMediaRepository();
+    final app = CleanerState(StartupAppStore(database), media);
+
+    await tester.pumpWidget(CleanerApp(app));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('home-brand')), findsOneWidget);
+    expect(find.textContaining('正在读取相册索引'), findsNothing);
+    expect(app.months, const [('2026-10', 2)]);
+    expect(media.scanRequests, 1);
+    expect(app.scanning, isTrue);
+    expect(media.fullSimilarityRequests, 0);
+    expect(media.cachedSimilarityRequests, 1);
+    expect(media.albumRequests, 0);
+
+    media.scanCompleter.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(app.scanRevision, 1);
+    expect(media.cachedSimilarityRequests, 2);
+
+    await tester.tap(find.byKey(const Key('albums-tab')));
+    await tester.pump();
+    expect(media.albumRequests, 1);
+  });
 
   testWidgets('the first-run tutorial auto-plays four swipe pages', (
     tester,

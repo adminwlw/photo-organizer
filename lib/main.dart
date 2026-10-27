@@ -308,10 +308,130 @@ class _BatchQueueBar extends StatelessWidget {
   );
 }
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final store = await AppStore.open();
-  runApp(CleanerApp(CleanerState(store, MediaRepository())));
+  runApp(const BootstrapApp());
+}
+
+class BootstrapApp extends StatefulWidget {
+  const BootstrapApp({super.key, this.openStore, this.createMedia});
+
+  final Future<AppStore> Function()? openStore;
+  final MediaRepository Function()? createMedia;
+
+  @override
+  State<BootstrapApp> createState() => _BootstrapAppState();
+}
+
+class _BootstrapAppState extends State<BootstrapApp> {
+  CleanerState? app;
+  Object? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  Future<void> _open() async {
+    setState(() => error = null);
+    try {
+      final store = await (widget.openStore ?? AppStore.open)();
+      if (!mounted) {
+        await store.close();
+        return;
+      }
+      setState(() {
+        app = CleanerState(
+          store,
+          (widget.createMedia ?? MediaRepository.new)(),
+        );
+      });
+    } catch (caught) {
+      if (mounted) setState(() => error = caught);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = app;
+    if (current != null) return CleanerApp(current);
+    return _StartupScreen(error: error, onRetry: _open);
+  }
+}
+
+class _StartupScreen extends StatelessWidget {
+  const _StartupScreen({this.error, this.onRetry});
+
+  final Object? error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: '相册删除',
+    debugShowCheckedModeBanner: false,
+    home: _StartupBrand(error: error, onRetry: onRetry),
+  );
+}
+
+class _StartupBrand extends StatelessWidget {
+  const _StartupBrand({this.error, this.onRetry});
+
+  final Object? error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: _systemBackground,
+    body: SafeArea(
+      child: Center(
+        child: Column(
+          key: const Key('startup-brand'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF35C9F2), Color(0xFF246BEB)],
+                ),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Icon(
+                Icons.photo_library_rounded,
+                color: Colors.white,
+                size: 46,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '相册删除',
+              style: TextStyle(
+                color: _primaryLabel,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 18),
+            if (error == null)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else ...[
+              const Text('启动失败，请重试', style: TextStyle(color: _secondaryLabel)),
+              const SizedBox(height: 8),
+              TextButton(onPressed: onRetry, child: const Text('重试')),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class CleanerState extends ChangeNotifier {
@@ -322,7 +442,7 @@ class CleanerState extends ChangeNotifier {
   bool onboarded = false;
   bool scanning = false;
   bool scanFailed = false;
-  int indexed = 0;
+  int scanRevision = 0;
   PermissionState? permissionState;
   DownSwipeAction downAction = DownSwipeAction.returnToAlbum;
   List<(String, int)> months = [];
@@ -353,17 +473,21 @@ class CleanerState extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    onboarded = await store.setting('onboarded') == '1';
-    downAction = switch (await store.setting('down_swipe_action')) {
+    final onboardedRequest = store.setting('onboarded');
+    final downActionRequest = store.setting('down_swipe_action');
+    final monthsRequest = store.months();
+    final permissionRequest = media.permission();
+    onboarded = await onboardedRequest == '1';
+    downAction = switch (await downActionRequest) {
       'pending' || 'undecided' => DownSwipeAction.pending,
       'keep' || 'returnToAlbum' || 'skip' => DownSwipeAction.returnToAlbum,
       'none' => DownSwipeAction.none,
       _ => DownSwipeAction.returnToAlbum,
     };
-    permissionState = await media.permission();
+    months = await monthsRequest;
+    permissionState = await permissionRequest;
     ready = true;
     notifyListeners();
-    if (onboarded && permissionState!.hasAccess) await refresh();
   }
 
   Future<void> finishOnboarding() async {
@@ -400,14 +524,10 @@ class CleanerState extends ChangeNotifier {
     }
     scanning = true;
     scanFailed = false;
-    indexed = 0;
-    notifyListeners();
     try {
-      await media.scan(store, (count) {
-        indexed = count;
-        notifyListeners();
-      });
+      await media.scan(store, (_) {});
       months = await store.months();
+      scanRevision++;
     } catch (_) {
       scanFailed = true;
     } finally {
@@ -430,7 +550,19 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    widget.state.initialize();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await widget.state.initialize();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          widget.state.onboarded &&
+          widget.state.permissionState?.hasAccess == true) {
+        unawaited(widget.state.refresh());
+      }
+    });
   }
 
   @override
@@ -600,9 +732,7 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
       builder: (context, _) {
         final app = widget.state;
         if (!app.ready) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const _StartupBrand();
         }
         if (!app.onboarded) {
           return OnboardingScreen(
@@ -962,11 +1092,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int tab = 0;
-  late Future<List<SystemAlbumSummary>> systemAlbums;
+  Future<List<SystemAlbumSummary>>? systemAlbums;
   late Future<List<SystemCategorySummary>> systemCategories;
   late Future<List<MediaRecord>> allMediaCover;
   late Future<List<int>> localCategoryCounts;
   late Future<int> similarPhotoCount;
+  late int observedScanRevision;
   MediaStorageSummary? storage;
   bool storageLoading = false;
   int storageProcessed = 0;
@@ -978,11 +1109,38 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     storage = app.storageSummary;
-    systemAlbums = app.media.systemAlbums();
-    systemCategories = app.media.systemCategories();
+    observedScanRevision = app.scanRevision;
+    systemCategories = Platform.isIOS
+        ? _loadSystemCategoriesAfterFirstFrame()
+        : Future.value(const []);
     allMediaCover = _loadAllMediaCover();
     localCategoryCounts = _loadLocalCategoryCounts();
     similarPhotoCount = _loadSimilarPhotoCount();
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (observedScanRevision == app.scanRevision) return;
+    observedScanRevision = app.scanRevision;
+    app.invalidateStorageSummary();
+    storage = null;
+    allMediaCover = _loadAllMediaCover();
+    localCategoryCounts = _loadLocalCategoryCounts();
+    similarPhotoCount = _loadSimilarPhotoCount();
+    if (systemAlbums != null) systemAlbums = app.media.systemAlbums();
+    if (Platform.isIOS) systemCategories = app.media.systemCategories();
+  }
+
+  Future<List<SystemCategorySummary>>
+  _loadSystemCategoriesAfterFirstFrame() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return const [];
+    return app.media.systemCategories();
+  }
+
+  void _ensureAlbumsLoaded() {
+    systemAlbums ??= app.media.systemAlbums();
   }
 
   Future<List<MediaRecord>> _loadAllMediaCover() async => (await Future.wait([
@@ -996,10 +1154,8 @@ class _HomeScreenState extends State<HomeScreen> {
     app.store.count(Scope.live),
   ]);
 
-  Future<int> _loadSimilarPhotoCount() async {
-    final groups = await app.media.findSimilarPhotos(app.store, (_, _) {});
-    return groups.fold<int>(0, (total, group) => total + group.items.length);
-  }
+  Future<int> _loadSimilarPhotoCount() =>
+      app.media.cachedSimilarPhotoCount(app.store);
 
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -1033,17 +1189,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshAll() async {
     await app.refresh();
     if (!mounted) return;
-    app.invalidateStorageSummary();
-    setState(() {
-      systemAlbums = app.media.systemAlbums();
-      systemCategories = app.media.systemCategories();
-      allMediaCover = _loadAllMediaCover();
-      localCategoryCounts = _loadLocalCategoryCounts();
-      similarPhotoCount = _loadSimilarPhotoCount();
-      storage = null;
-      storageProcessed = 0;
-      storageTotal = 0;
-    });
+    storageProcessed = 0;
+    storageTotal = 0;
     if (tab == 2) await _calculateStorage();
   }
 
@@ -2114,7 +2261,10 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   );
 
-  Widget _albums() => _albumCategories();
+  Widget _albums() {
+    _ensureAlbumsLoaded();
+    return _albumCategories();
+  }
 
   List<(String, int?, Color)> _storageMetrics() {
     final metrics = <(String, int?, Color)>[
@@ -2330,7 +2480,11 @@ class _HomeScreenState extends State<HomeScreen> {
     child: RefreshIndicator(
       key: ValueKey(tab),
       onRefresh: _refreshAll,
-      child: [_home(), _albums(), _more()][tab],
+      child: switch (tab) {
+        0 => _home(),
+        1 => _albums(),
+        _ => _more(),
+      },
     ),
   );
 
@@ -2343,21 +2497,7 @@ class _HomeScreenState extends State<HomeScreen> {
     child: Scaffold(
       backgroundColor: _systemBackground,
       extendBody: true,
-      body: SafeArea(
-        bottom: false,
-        child: app.scanning && app.months.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Text('正在读取相册索引：${app.indexed} 项'),
-                  ],
-                ),
-              )
-            : _tabBody(),
-      ),
+      body: SafeArea(bottom: false, child: _tabBody()),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
@@ -2377,6 +2517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   height: 52,
                   selectedIndex: tab,
                   onDestinationSelected: (index) {
+                    if (index == 1) _ensureAlbumsLoaded();
                     setState(() => tab = index);
                     if (index == 2) _calculateStorage();
                   },
