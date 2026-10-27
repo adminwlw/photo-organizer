@@ -1,4 +1,5 @@
 import 'package:album_cleaner/media_repository.dart';
+import 'package:album_cleaner/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_manager/photo_manager.dart';
 
@@ -46,6 +47,50 @@ void main() {
       ['a', 'b', 'c'],
     ]);
     expect(reversed, forward);
+  });
+
+  test('similar photo keeper prefers resolution then recency', () {
+    const olderLarge = MediaRecord(
+      id: 'older-large',
+      takenAt: 100,
+      width: 3000,
+      height: 2000,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    const newerLarge = MediaRecord(
+      id: 'newer-large',
+      takenAt: 200,
+      width: 3000,
+      height: 2000,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    const newestSmall = MediaRecord(
+      id: 'newest-small',
+      takenAt: 300,
+      width: 1000,
+      height: 1000,
+      month: '2026-10',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+
+    expect(
+      recommendedSimilarPhotoKeeper([newestSmall, olderLarge, newerLarge]).id,
+      'newer-large',
+    );
   });
 
   test('band index handles a large mostly-unique library', () {

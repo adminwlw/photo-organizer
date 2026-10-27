@@ -63,6 +63,13 @@ String _formatMediaDate(int milliseconds) {
   return '${date.year}年${date.month}月${date.day}日';
 }
 
+String _formatSimilarityGeneratedAt(int milliseconds) {
+  final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${date.year}/${twoDigits(date.month)}/${twoDigits(date.day)} '
+      '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+}
+
 int _photoGridColumnCount(double logicalWidth) {
   const horizontalPadding = 40.0;
   const spacing = 6.0;
@@ -3053,8 +3060,12 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   List<SimilarPhotoGroup>? groups;
   int processed = 0;
   int total = 0;
+  int? generatedAt;
+  int loadToken = 0;
   bool failed = false;
   bool refreshing = false;
+  bool cancelRequested = false;
+  bool cancelled = false;
 
   @override
   void initState() {
@@ -3063,9 +3074,12 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   }
 
   Future<void> _load() async {
+    final token = ++loadToken;
     setState(() {
       failed = false;
       refreshing = true;
+      cancelRequested = false;
+      cancelled = false;
       processed = 0;
       total = 0;
     });
@@ -3073,31 +3087,63 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
       final cached = await widget.app.media.cachedSimilarPhotos(
         widget.app.store,
       );
-      if (mounted && cached != null) setState(() => groups = cached);
+      final cachedAt = await widget.app.media.cachedSimilarityGeneratedAt(
+        widget.app.store,
+      );
+      if (mounted && token == loadToken && cached != null) {
+        setState(() {
+          groups = cached;
+          generatedAt = cachedAt;
+        });
+      }
       final result = await widget.app.media.findSimilarPhotos(
         widget.app.store,
         (value, maximum) {
-          if (!mounted) return;
+          if (!mounted || token != loadToken) return;
           setState(() {
             processed = value;
             total = maximum;
           });
         },
+        shouldCancel: () => cancelRequested || !mounted || token != loadToken,
       );
-      if (mounted) {
+      final refreshedAt = await widget.app.media.cachedSimilarityGeneratedAt(
+        widget.app.store,
+      );
+      if (mounted && token == loadToken) {
         setState(() {
           groups = result;
+          generatedAt = refreshedAt;
+          refreshing = false;
+        });
+      }
+    } on SimilarityScanCancelled {
+      if (mounted && token == loadToken) {
+        setState(() {
+          cancelled = true;
           refreshing = false;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && token == loadToken) {
         setState(() {
           failed = true;
           refreshing = false;
         });
       }
     }
+  }
+
+  void _cancel() {
+    if (!refreshing || cancelRequested) return;
+    setState(() => cancelRequested = true);
+  }
+
+  @override
+  void dispose() {
+    cancelRequested = true;
+    loadToken++;
+    super.dispose();
   }
 
   Future<void> _review(SimilarPhotoGroup group, int index) async {
@@ -3128,6 +3174,11 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
           '仅在本机分析缩略图，不会上传照片',
           style: TextStyle(color: _secondaryLabel, fontSize: 12),
         ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: cancelRequested ? null : _cancel,
+          child: Text(cancelRequested ? '正在停止…' : '停止分析'),
+        ),
       ],
     ),
   );
@@ -3138,12 +3189,32 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
         const LinearProgressIndicator(minHeight: 2),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
-          child: Text(
-            total == 0 ? '正在检查新增或修改的照片' : '正在更新 $processed / $total 张',
-            style: const TextStyle(color: _secondaryLabel, fontSize: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  total == 0 ? '正在检查新增或修改的照片' : '正在更新 $processed / $total 张',
+                  style: const TextStyle(color: _secondaryLabel, fontSize: 12),
+                ),
+              ),
+              TextButton(
+                onPressed: cancelRequested ? null : _cancel,
+                child: Text(cancelRequested ? '正在停止…' : '停止'),
+              ),
+            ],
           ),
         ),
       ],
+      if (cancelled)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+          child: Row(
+            children: [
+              const Expanded(child: Text('分析已停止，当前显示上次结果')),
+              TextButton(onPressed: _load, child: const Text('重新分析')),
+            ],
+          ),
+        ),
       if (failed)
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
@@ -3164,40 +3235,12 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
                 separatorBuilder: (_, _) => const SizedBox(height: 22),
                 itemBuilder: (context, groupIndex) {
                   final group = groups![groupIndex];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '第 ${groupIndex + 1} 组 · ${group.items.length} 张',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 116,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: group.items.length,
-                          separatorBuilder: (_, _) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final item = group.items[index];
-                            return ClipRRect(
-                              borderRadius: BorderRadius.circular(18),
-                              child: InkWell(
-                                key: ValueKey('similar-${item.id}'),
-                                onTap: () => _review(group, index),
-                                child: SizedBox.square(
-                                  dimension: 116,
-                                  child: MediaThumb(widget.app.media, item.id),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+                  return _SimilarPhotoGroupCard(
+                    key: ValueKey('similar-group-${group.items.first.id}'),
+                    app: widget.app,
+                    group: group,
+                    groupIndex: groupIndex,
+                    onReview: (index) => _review(group, index),
                   );
                 },
               ),
@@ -3209,7 +3252,25 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: const _FloatingGlassAppBar(title: Text('相似照片')),
     body: groups != null
-        ? _results()
+        ? Column(
+            children: [
+              if (generatedAt != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '最近分析 ${_formatSimilarityGeneratedAt(generatedAt!)}',
+                      style: const TextStyle(
+                        color: _secondaryLabel,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              Expanded(child: _results()),
+            ],
+          )
         : failed
         ? Center(
             child: Column(
@@ -3221,8 +3282,283 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
               ],
             ),
           )
+        : cancelled
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('已停止相似照片分析'),
+                const SizedBox(height: 12),
+                OutlinedButton(onPressed: _load, child: const Text('重新分析')),
+              ],
+            ),
+          )
         : _loading(),
   );
+}
+
+class _SimilarPhotoGroupCard extends StatefulWidget {
+  const _SimilarPhotoGroupCard({
+    super.key,
+    required this.app,
+    required this.group,
+    required this.groupIndex,
+    required this.onReview,
+  });
+
+  final CleanerState app;
+  final SimilarPhotoGroup group;
+  final int groupIndex;
+  final ValueChanged<int> onReview;
+
+  @override
+  State<_SimilarPhotoGroupCard> createState() => _SimilarPhotoGroupCardState();
+}
+
+class _SimilarPhotoGroupCardState extends State<_SimilarPhotoGroupCard> {
+  final selected = <String>{};
+  Map<String, int>? sizes;
+  int sizeLoadToken = 0;
+  bool queueing = false;
+
+  String get itemSignature => widget.group.items.map((item) => item.id).join();
+
+  MediaRecord get keeper => recommendedSimilarPhotoKeeper(widget.group.items);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSizes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SimilarPhotoGroupCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldSignature = oldWidget.group.items.map((item) => item.id).join();
+    if (oldSignature != itemSignature) {
+      selected.clear();
+      sizes = null;
+      _loadSizes();
+    }
+  }
+
+  Future<void> _loadSizes() async {
+    final token = ++sizeLoadToken;
+    final result = await widget.app.media.mediaSizes(
+      widget.group.items.map((item) => item.id),
+    );
+    if (mounted && token == sizeLoadToken) setState(() => sizes = result);
+  }
+
+  void _toggle(String id) => setState(() {
+    selected.contains(id) ? selected.remove(id) : selected.add(id);
+  });
+
+  void _toggleRest() {
+    final rest = widget.group.items
+        .where((item) => item.id != keeper.id)
+        .map((item) => item.id)
+        .toSet();
+    setState(() {
+      if (rest.every(selected.contains)) {
+        selected.removeAll(rest);
+      } else {
+        selected.addAll(rest);
+      }
+    });
+  }
+
+  Future<void> _queueSelected() async {
+    if (queueing || selected.isEmpty) return;
+    final items = widget.group.items
+        .where((item) => selected.contains(item.id))
+        .toList();
+    setState(() => queueing = true);
+    try {
+      final scope = Scope('similar:${widget.group.items.first.id}', '相似照片');
+      for (final item in items) {
+        await widget.app.store.act(scope, item, ReviewAction.delete);
+      }
+      if (!mounted) return;
+      setState(selected.clear);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已加入待删除队列')));
+    } finally {
+      if (mounted) setState(() => queueing = false);
+    }
+  }
+
+  String _spaceSummary() {
+    if (sizes == null) return '正在估算可释放空间';
+    final ids = selected.isEmpty
+        ? widget.group.items
+              .where((item) => item.id != keeper.id)
+              .map((item) => item.id)
+        : selected;
+    var bytes = 0;
+    var unknown = 0;
+    for (final id in ids) {
+      final size = sizes![id] ?? 0;
+      if (size > 0) {
+        bytes += size;
+      } else {
+        unknown++;
+      }
+    }
+    final prefix = selected.isEmpty
+        ? '建议可释放 ${_formatResultBytes(bytes)}'
+        : '已选择 ${selected.length} 张 · ${_formatResultBytes(bytes)}';
+    return unknown == 0 ? prefix : '$prefix · $unknown 张大小待估算';
+  }
+
+  @override
+  void dispose() {
+    sizeLoadToken++;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rest = widget.group.items.where((item) => item.id != keeper.id);
+    final allRestSelected = rest.every((item) => selected.contains(item.id));
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _secondarySystemBackground,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '第 ${widget.groupIndex + 1} 组 · '
+                    '${widget.group.items.length} 张',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  key: ValueKey(
+                    'similar-select-rest-${widget.group.items.first.id}',
+                  ),
+                  onPressed: queueing ? null : _toggleRest,
+                  child: Text(allRestSelected ? '清空' : '选择其余'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 116,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.group.items.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final item = widget.group.items[index];
+                  final isKeeper = item.id == keeper.id;
+                  final isSelected = selected.contains(item.id);
+                  return SizedBox.square(
+                    dimension: 116,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Material(
+                            color: _systemBackground,
+                            child: InkWell(
+                              key: ValueKey('similar-${item.id}'),
+                              onTap: queueing
+                                  ? null
+                                  : () => widget.onReview(index),
+                              child: MediaThumb(widget.app.media, item.id),
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: _systemBlue,
+                                  width: 3,
+                                ),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                          ),
+                        if (isKeeper)
+                          Positioned(
+                            left: 7,
+                            bottom: 7,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: const Color(0xD9000000),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 4,
+                                ),
+                                child: Text(
+                                  '推荐保留',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: SizedBox.square(
+                            dimension: 48,
+                            child: IconButton(
+                              key: ValueKey('similar-select-${item.id}'),
+                              onPressed: queueing
+                                  ? null
+                                  : () => _toggle(item.id),
+                              padding: const EdgeInsets.all(10),
+                              icon: _SelectionMarker(selected: isSelected),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _spaceSummary(),
+              style: const TextStyle(color: _secondaryLabel, fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: ValueKey('similar-queue-${widget.group.items.first.id}'),
+                onPressed: selected.isEmpty || queueing ? null : _queueSelected,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: Text(queueing ? '正在加入…' : '加入待删除'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _VideoDurationBadge extends StatelessWidget {

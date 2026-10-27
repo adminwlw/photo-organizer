@@ -298,6 +298,13 @@ void main() {
         ],
       );
       expect(
+        await store.similarityGeneratedAt(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
+        isNotNull,
+      );
+      expect(
         await store.similarityGroups(
           algorithmVersion: similarityAlgorithmVersion + 1,
           maxDistance: similarityMaxDistance,
@@ -315,8 +322,65 @@ void main() {
         ),
         isEmpty,
       );
+      expect(
+        await store.similarityGeneratedAt(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
+        isNull,
+      );
     },
   );
+
+  test('similarity scan can stop without replacing a snapshot', () async {
+    final store = await AppStore.open(path: inMemoryDatabasePath);
+    addTearDown(store.close);
+    const photos = [
+      MediaRecord(
+        id: 'old-group-a',
+        takenAt: 2,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+      MediaRecord(
+        id: 'old-group-b',
+        takenAt: 1,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+    ];
+    await store.upsertMediaPage(photos, 1);
+    await store.finishScan(1);
+    await store.replaceSimilarityGroups(
+      [photos.map((photo) => photo.id).toList()],
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
+
+    await expectLater(
+      () => MediaRepository().findSimilarPhotos(
+        store,
+        (_, _) {},
+        shouldCancel: () => true,
+      ),
+      throwsA(isA<SimilarityScanCancelled>()),
+    );
+    expect(
+      await store.similarityGroups(
+        algorithmVersion: similarityAlgorithmVersion,
+        maxDistance: similarityMaxDistance,
+      ),
+      [photos.map((photo) => photo.id).toList()],
+    );
+  });
 
   test('a valid group snapshot opens without reading thumbnails', () async {
     final store = await AppStore.open(path: inMemoryDatabasePath);

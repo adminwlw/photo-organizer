@@ -31,10 +31,14 @@ class FakeMediaRepository extends MediaRepository {
       null;
 
   @override
+  Future<int?> cachedSimilarityGeneratedAt(AppStore store) async => null;
+
+  @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
-    void Function(int, int) onProgress,
-  ) async => const [];
+    void Function(int, int) onProgress, {
+    bool Function()? shouldCancel,
+  }) async => const [];
 
   @override
   Future<AssetEntity?> get(String id) async =>
@@ -94,8 +98,9 @@ class StartupMediaRepository extends FakeMediaRepository {
   @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
-    void Function(int, int) onProgress,
-  ) async {
+    void Function(int, int) onProgress, {
+    bool Function()? shouldCancel,
+  }) async {
     fullSimilarityRequests++;
     return const [];
   }
@@ -121,13 +126,19 @@ class SimilarMediaRepository extends FakeMediaRepository {
   @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
-    void Function(int, int) onProgress,
-  ) async {
+    void Function(int, int) onProgress, {
+    bool Function()? shouldCancel,
+  }) async {
     onProgress(2, 2);
     return const [
       SimilarPhotoGroup([photo, nextPhoto]),
     ];
   }
+
+  @override
+  Future<Map<String, int>> mediaSizes(Iterable<String> ids) async => {
+    for (final id in ids) id: 2 * 1024 * 1024,
+  };
 }
 
 class RefreshingSimilarMediaRepository extends SimilarMediaRepository {
@@ -142,8 +153,9 @@ class RefreshingSimilarMediaRepository extends SimilarMediaRepository {
   @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
-    void Function(int, int) onProgress,
-  ) {
+    void Function(int, int) onProgress, {
+    bool Function()? shouldCancel,
+  }) {
     onProgress(2, 3);
     return refresh.future;
   }
@@ -210,6 +222,7 @@ class UndoAppStore extends FakeAppStore {
   int queued = 0;
   final List<String> undone = [];
   final List<ReviewAction> actions = [];
+  final List<String> actedMediaIds = [];
 
   @override
   Future<List<Map<String, Object?>>> queue() async =>
@@ -222,6 +235,7 @@ class UndoAppStore extends FakeAppStore {
     ReviewAction action,
   ) async {
     actions.add(action);
+    actedMediaIds.add(media.id);
     if (action == ReviewAction.delete) queued++;
     return ActionSnapshot(media.id, scope.key, null, null, const [], null);
   }
@@ -2261,6 +2275,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ReviewScreen), findsOneWidget);
     expect(find.byKey(const ValueKey('photo')), findsOneWidget);
+  });
+
+  testWidgets('similar photo groups recommend a keeper and queue selections', (
+    tester,
+  ) async {
+    final store = ScopeAppStore(database);
+    final app = CleanerState(store, SimilarMediaRepository());
+
+    await tester.pumpWidget(MaterialApp(home: SimilarPhotosScreen(app)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('推荐保留'), findsOneWidget);
+    expect(find.text('建议可释放 2.0 MB'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('similar-select-rest-photo')));
+    await tester.pump();
+    expect(find.text('已选择 1 张 · 2.0 MB'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('similar-queue-photo')));
+    await tester.pumpAndSettle();
+
+    expect(store.actedMediaIds.single, nextPhoto.id);
+    expect((await store.queue()).length, 1);
+    expect(find.text('已加入待删除队列'), findsOneWidget);
   });
 
   testWidgets('similar photos show cached groups while refreshing', (

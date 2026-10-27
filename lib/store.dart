@@ -335,6 +335,23 @@ class AppStore {
     return groups.values.where((group) => group.length > 1).toList();
   }
 
+  Future<int?> similarityGeneratedAt({
+    required int algorithmVersion,
+    required int maxDistance,
+  }) async {
+    final groups = await similarityGroups(
+      algorithmVersion: algorithmVersion,
+      maxDistance: maxDistance,
+    );
+    if (groups == null || groups.isEmpty) return null;
+    return int.tryParse(
+      await setting(
+            _similarityGroupSettingKey(algorithmVersion, maxDistance),
+          ) ??
+          '',
+    );
+  }
+
   Future<void> replaceSimilarityGroups(
     List<List<String>> groups, {
     required int algorithmVersion,

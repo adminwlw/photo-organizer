@@ -11,6 +11,21 @@ import 'store.dart';
 const similarityAlgorithmVersion = 2;
 const similarityMaxDistance = 6;
 
+class SimilarityScanCancelled implements Exception {}
+
+MediaRecord recommendedSimilarPhotoKeeper(List<MediaRecord> items) =>
+    items.reduce((best, item) {
+      final bestPixels = best.width * best.height;
+      final itemPixels = item.width * item.height;
+      if (itemPixels != bestPixels) {
+        return itemPixels > bestPixels ? item : best;
+      }
+      if (item.takenAt != best.takenAt) {
+        return item.takenAt > best.takenAt ? item : best;
+      }
+      return item.id.compareTo(best.id) < 0 ? item : best;
+    });
+
 enum SystemAlbumGroup { album, people, smart }
 
 bool androidUsesSystemTrash(int sdkInt) => sdkInt >= 30;
@@ -657,9 +672,18 @@ class MediaRepository {
 
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
-    void Function(int, int) onProgress,
-  ) async {
+    void Function(int, int) onProgress, {
+    bool Function()? shouldCancel,
+  }) async {
+    void checkCancelled() {
+      if (shouldCancel?.call() ?? false) {
+        throw SimilarityScanCancelled();
+      }
+    }
+
+    checkCancelled();
     final photos = await store.photoRecords();
+    checkCancelled();
     final hashes = await store.similarityHashes(
       algorithmVersion: similarityAlgorithmVersion,
     );
@@ -671,10 +695,12 @@ class MediaRepository {
     final missingPhotos = missing.toList();
     var processed = photos.length - missingPhotos.length;
     onProgress(processed, photos.length);
+    checkCancelled();
     if (missingPhotos.isEmpty && cachedGroups != null) {
       return _similarPhotoGroups(photos, cachedGroups);
     }
     for (var start = 0; start < missingPhotos.length; start += 8) {
+      checkCancelled();
       final batch = missingPhotos.skip(start).take(8).toList();
       final values = await Future.wait(
         batch.map((photo) async {
@@ -685,7 +711,9 @@ class MediaRepository {
           }
         }),
       );
+      checkCancelled();
       for (var index = 0; index < batch.length; index++) {
+        checkCancelled();
         final hash = values[index];
         if (hash == null) continue;
         hashes[batch[index].id] = hash;
@@ -697,6 +725,7 @@ class MediaRepository {
       }
       processed += batch.length;
       onProgress(processed, photos.length);
+      checkCancelled();
     }
     final orderedHashes = {
       for (final photo in photos) photo.id: ?hashes[photo.id],
@@ -707,6 +736,7 @@ class MediaRepository {
         maxDistance: similarityMaxDistance,
       ),
     );
+    checkCancelled();
     await store.replaceSimilarityGroups(
       groups,
       algorithmVersion: similarityAlgorithmVersion,
@@ -742,6 +772,12 @@ class MediaRepository {
     if (groups == null) return null;
     return _similarPhotoGroups(await store.photoRecords(), groups);
   }
+
+  Future<int?> cachedSimilarityGeneratedAt(AppStore store) =>
+      store.similarityGeneratedAt(
+        algorithmVersion: similarityAlgorithmVersion,
+        maxDistance: similarityMaxDistance,
+      );
 
   List<SimilarPhotoGroup> _similarPhotoGroups(
     List<MediaRecord> photos,
