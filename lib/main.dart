@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -19,6 +20,8 @@ const _primaryLabel = Color(0xFF000000);
 const _secondaryLabel = Color(0x993C3C43);
 const _tertiaryLabel = Color(0x4D3C3C43);
 const _separator = Color(0x1F3C3C43);
+const _darkGlass = Color(0x66000000);
+const _lightGlass = Color(0xA6F9F9F9);
 
 enum DownSwipeAction { none, pending, returnToAlbum }
 
@@ -70,6 +73,17 @@ String _formatSimilarityGeneratedAt(int milliseconds) {
       '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
 }
 
+MediaRecord _mediaRecordFromAsset(String id, AssetEntity asset) => MediaRecord(
+  id: id,
+  takenAt: asset.createDateSecond == null ? 0 : asset.createDateSecond! * 1000,
+  month: 'unknown',
+  type: asset.type == AssetType.video ? 2 : 1,
+  duration: asset.duration,
+  screenshot: false,
+  selfie: false,
+  live: asset.isLivePhoto,
+);
+
 int _photoGridColumnCount(double logicalWidth) {
   const horizontalPadding = 40.0;
   const spacing = 6.0;
@@ -92,6 +106,12 @@ int _albumGridColumnCount(double logicalWidth) {
   );
 }
 
+double _floatingHeaderInset(BuildContext context) =>
+    MediaQuery.paddingOf(context).top + 52;
+
+double _mediaHeaderInset(BuildContext context) =>
+    MediaQuery.paddingOf(context).top + 60;
+
 class _SystemTopGradient extends StatelessWidget {
   const _SystemTopGradient({super.key});
 
@@ -108,10 +128,263 @@ class _SystemTopGradient extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xE6000000), Color(0x00000000)],
+              colors: [Color(0x99000000), Color(0x00000000)],
             ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+class _GlassSurface extends StatelessWidget {
+  const _GlassSurface({
+    required this.child,
+    this.color = _darkGlass,
+    this.radius = 20,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final Widget child;
+  final Color color;
+  final double radius;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(radius),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x1F000000),
+          blurRadius: 12,
+          offset: Offset(0, 4),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
+          ),
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    ),
+  );
+}
+
+class _GlassIconButton extends StatelessWidget {
+  const _GlassIconButton({
+    super.key,
+    this.buttonKey,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.diameter = 42,
+    this.iconSize = 20,
+    this.color = _darkGlass,
+  });
+
+  final Key? buttonKey;
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final double diameter;
+  final double iconSize;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => _GlassSurface(
+    color: color,
+    radius: diameter / 2,
+    child: IconButton(
+      key: buttonKey,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      color: Colors.white,
+      disabledColor: Colors.white60,
+      constraints: BoxConstraints.tightFor(width: diameter, height: diameter),
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: iconSize),
+    ),
+  );
+}
+
+class _AppleZoomableMedia extends StatefulWidget {
+  const _AppleZoomableMedia({
+    super.key,
+    required this.child,
+    this.surfaceKey,
+    this.viewerKey,
+    this.onSwipeUpdate,
+    this.onSwipeEnd,
+    this.onSwipeCancel,
+    this.onZoomChanged,
+  });
+
+  final Widget child;
+  final Key? surfaceKey;
+  final Key? viewerKey;
+  final ValueChanged<Offset>? onSwipeUpdate;
+  final Future<void> Function(Velocity velocity)? onSwipeEnd;
+  final VoidCallback? onSwipeCancel;
+  final ValueChanged<bool>? onZoomChanged;
+
+  @override
+  State<_AppleZoomableMedia> createState() => _AppleZoomableMediaState();
+}
+
+class _AppleZoomableMediaState extends State<_AppleZoomableMedia>
+    with SingleTickerProviderStateMixin {
+  static const _doubleTapScale = 2.5;
+  static const _maxScale = 5.0;
+
+  final transformation = TransformationController();
+  final pointers = <int>{};
+  late final AnimationController animation;
+  Animation<Matrix4>? matrixAnimation;
+  VelocityTracker? velocityTracker;
+  int? swipePointer;
+  Offset? doubleTapPosition;
+  double swipeDistance = 0;
+  bool zoomed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    animation =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 240),
+        )..addListener(() {
+          final current = matrixAnimation;
+          if (current == null) return;
+          transformation.value = current.value;
+          _syncZoom();
+        });
+  }
+
+  @override
+  void dispose() {
+    animation.dispose();
+    transformation.dispose();
+    super.dispose();
+  }
+
+  void _syncZoom() {
+    final next = transformation.value.getMaxScaleOnAxis() > 1.01;
+    if (next == zoomed) return;
+    zoomed = next;
+    widget.onZoomChanged?.call(next);
+    if (mounted) setState(() {});
+  }
+
+  void _animateTo(Matrix4 target) {
+    animation.stop();
+    matrixAnimation = Matrix4Tween(
+      begin: transformation.value.clone(),
+      end: target,
+    ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+    animation.forward(from: 0);
+  }
+
+  void _onDoubleTap() {
+    if (zoomed) {
+      _animateTo(Matrix4.identity());
+      return;
+    }
+    final point = doubleTapPosition ?? Offset.zero;
+    final target = Matrix4.diagonal3Values(_doubleTapScale, _doubleTapScale, 1)
+      ..setTranslationRaw(
+        -point.dx * (_doubleTapScale - 1),
+        -point.dy * (_doubleTapScale - 1),
+        0,
+      );
+    _animateTo(target);
+  }
+
+  void _pointerDown(PointerDownEvent event) {
+    pointers.add(event.pointer);
+    if (pointers.length == 1 && !zoomed) {
+      swipePointer = event.pointer;
+      swipeDistance = 0;
+      velocityTracker = VelocityTracker.withKind(event.kind)
+        ..addPosition(event.timeStamp, event.position);
+      return;
+    }
+    if (pointers.length == 2 && swipePointer != null) {
+      swipePointer = null;
+      velocityTracker = null;
+      swipeDistance = 0;
+      widget.onSwipeCancel?.call();
+    }
+  }
+
+  void _pointerMove(PointerMoveEvent event) {
+    if (event.pointer != swipePointer || pointers.length != 1 || zoomed) return;
+    velocityTracker?.addPosition(event.timeStamp, event.position);
+    swipeDistance += event.delta.distance;
+    widget.onSwipeUpdate?.call(event.delta);
+  }
+
+  void _pointerUp(PointerUpEvent event) {
+    final active = event.pointer == swipePointer && !zoomed;
+    velocityTracker?.addPosition(event.timeStamp, event.position);
+    final velocity = velocityTracker?.getVelocity() ?? Velocity.zero;
+    pointers.remove(event.pointer);
+    swipePointer = null;
+    velocityTracker = null;
+    if (active && swipeDistance >= 2) {
+      final callback = widget.onSwipeEnd;
+      if (callback != null) unawaited(callback(velocity));
+    }
+    swipeDistance = 0;
+  }
+
+  void _pointerCancel(PointerCancelEvent event) {
+    pointers.remove(event.pointer);
+    if (event.pointer != swipePointer) return;
+    swipePointer = null;
+    velocityTracker = null;
+    swipeDistance = 0;
+    widget.onSwipeCancel?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    key: widget.surfaceKey,
+    behavior: HitTestBehavior.opaque,
+    onPointerDown: _pointerDown,
+    onPointerMove: _pointerMove,
+    onPointerUp: _pointerUp,
+    onPointerCancel: _pointerCancel,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onDoubleTapDown: (details) => doubleTapPosition = details.localPosition,
+      onDoubleTap: _onDoubleTap,
+      child: InteractiveViewer(
+        key: widget.viewerKey,
+        transformationController: transformation,
+        minScale: 1,
+        maxScale: _maxScale,
+        panEnabled: zoomed,
+        boundaryMargin: EdgeInsets.zero,
+        onInteractionStart: (_) => animation.stop(),
+        onInteractionUpdate: (_) => _syncZoom(),
+        onInteractionEnd: (_) {
+          if (transformation.value.getMaxScaleOnAxis() <= 1.01) {
+            _animateTo(Matrix4.identity());
+          } else {
+            _syncZoom();
+          }
+        },
+        child: SizedBox.expand(child: widget.child),
       ),
     ),
   );
@@ -158,6 +431,8 @@ class _FloatingGlassAppBar extends StatelessWidget
   Widget build(BuildContext context) => AppBar(
     primary: true,
     toolbarHeight: 52,
+    automaticallyImplyLeading: false,
+    forceMaterialTransparency: true,
     backgroundColor: Colors.transparent,
     foregroundColor: Colors.white,
     surfaceTintColor: Colors.transparent,
@@ -170,6 +445,21 @@ class _FloatingGlassAppBar extends StatelessWidget
     flexibleSpace: const _SystemTopGradient(
       key: Key('floating-header-gradient'),
     ),
+    leadingWidth: 58,
+    leading: Navigator.canPop(context)
+        ? Padding(
+            padding: const EdgeInsets.only(left: 10),
+            child: Center(
+              child: _GlassIconButton(
+                tooltip: '返回',
+                icon: Icons.arrow_back_ios_new_rounded,
+                onPressed: () => Navigator.maybePop(context),
+                diameter: 38,
+                iconSize: 18,
+              ),
+            ),
+          )
+        : null,
     title: title,
     actions: actions,
   );
@@ -196,6 +486,7 @@ class _MediaGradientAppBar extends StatelessWidget
     primary: true,
     toolbarHeight: 60,
     automaticallyImplyLeading: false,
+    forceMaterialTransparency: true,
     backgroundColor: Colors.transparent,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
@@ -206,12 +497,18 @@ class _MediaGradientAppBar extends StatelessWidget
     ),
     flexibleSpace: const _SystemTopGradient(key: Key('media-header-gradient')),
     leadingWidth: 52,
-    leading: IconButton(
-      key: const Key('media-header-back'),
-      tooltip: '返回',
-      onPressed: () => Navigator.maybePop(context),
-      color: Colors.white,
-      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+    leading: Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Center(
+        child: _GlassIconButton(
+          key: const Key('media-header-back'),
+          tooltip: '返回',
+          icon: Icons.arrow_back_ios_new_rounded,
+          onPressed: () => Navigator.maybePop(context),
+          diameter: 38,
+          iconSize: 18,
+        ),
+      ),
     ),
     titleSpacing: 0,
     title: Column(
@@ -254,18 +551,42 @@ class _HeaderSelectButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(right: 12),
+    padding: const EdgeInsets.only(right: 10),
     child: Center(
-      child: TextButton(
-        key: const Key('media-select-button'),
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: Colors.white,
-          disabledForegroundColor: Color(0x66FFFFFF),
-          backgroundColor: Colors.transparent,
-          minimumSize: const Size(62, 44),
+      child: _GlassSurface(
+        radius: 18,
+        child: TextButton(
+          key: const Key('media-select-button'),
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            disabledForegroundColor: const Color(0x66FFFFFF),
+            backgroundColor: Colors.transparent,
+            minimumSize: const Size(62, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+          ),
+          child: Text(selecting ? '取消' : '选择'),
         ),
-        child: Text(selecting ? '取消' : '选择'),
+      ),
+    ),
+  );
+}
+
+class _HeaderBrowseButton extends StatelessWidget {
+  const _HeaderBrowseButton({super.key, required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 6),
+    child: Center(
+      child: _GlassIconButton(
+        tooltip: '左右滑动浏览',
+        icon: Icons.swipe_rounded,
+        onPressed: onPressed,
+        diameter: 38,
+        iconSize: 20,
       ),
     ),
   );
@@ -1013,6 +1334,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: _systemBackground,
+    extendBodyBehindAppBar: Navigator.canPop(context),
     appBar: Navigator.canPop(context)
         ? const _FloatingGlassAppBar(title: Text('使用教程'))
         : null,
@@ -1028,89 +1350,92 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
         SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: PageView.builder(
-                  key: const Key('onboarding-pager'),
-                  controller: pager,
-                  itemCount: pageTitles.length,
-                  onPageChanged: (value) {
-                    setState(() => page = value);
-                    _schedulePlayback();
-                  },
-                  itemBuilder: (context, index) => _tutorialPage(index),
+          child: Padding(
+            padding: EdgeInsets.only(top: Navigator.canPop(context) ? 52 : 0),
+            child: Column(
+              children: [
+                Expanded(
+                  child: PageView.builder(
+                    key: const Key('onboarding-pager'),
+                    controller: pager,
+                    itemCount: pageTitles.length,
+                    onPageChanged: (value) {
+                      setState(() => page = value);
+                      _schedulePlayback();
+                    },
+                    itemBuilder: (context, index) => _tutorialPage(index),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-                child: Row(
-                  children: [
-                    Row(
-                      children: List.generate(
-                        pageTitles.length,
-                        (index) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(right: 7),
-                          decoration: BoxDecoration(
-                            color: index == page
-                                ? _systemBlue
-                                : const Color(0x33787880),
-                            borderRadius: BorderRadius.circular(99),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                  child: Row(
+                    children: [
+                      Row(
+                        children: List.generate(
+                          pageTitles.length,
+                          (index) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 7),
+                            decoration: BoxDecoration(
+                              color: index == page
+                                  ? _systemBlue
+                                  : const Color(0x33787880),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${page + 1} / ${pageTitles.length}',
-                      key: const Key('onboarding-page-indicator'),
-                      style: const TextStyle(
-                        color: Color(0xFF667085),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (page > 0)
-                      IconButton(
-                        key: const Key('onboarding-previous'),
-                        tooltip: '上一页',
-                        onPressed: () => pager.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOutCubic,
+                      const SizedBox(width: 8),
+                      Text(
+                        '${page + 1} / ${pageTitles.length}',
+                        key: const Key('onboarding-page-indicator'),
+                        style: const TextStyle(
+                          color: Color(0xFF667085),
+                          fontWeight: FontWeight.w700,
                         ),
-                        icon: const Icon(Icons.arrow_back_rounded),
                       ),
-                    FilledButton(
-                      key: const Key('onboarding-next'),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              if (page < pageTitles.length - 1) {
-                                pager.nextPage(
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOutCubic,
-                                );
-                              } else {
-                                playbackTimer?.cancel();
-                                setState(() => busy = true);
-                                try {
-                                  await widget.onDone();
-                                } finally {
-                                  if (mounted) setState(() => busy = false);
+                      const Spacer(),
+                      if (page > 0)
+                        IconButton(
+                          key: const Key('onboarding-previous'),
+                          tooltip: '上一页',
+                          onPressed: () => pager.previousPage(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                          ),
+                          icon: const Icon(Icons.arrow_back_rounded),
+                        ),
+                      FilledButton(
+                        key: const Key('onboarding-next'),
+                        onPressed: busy
+                            ? null
+                            : () async {
+                                if (page < pageTitles.length - 1) {
+                                  pager.nextPage(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                } else {
+                                  playbackTimer?.cancel();
+                                  setState(() => busy = true);
+                                  try {
+                                    await widget.onDone();
+                                  } finally {
+                                    if (mounted) setState(() => busy = false);
+                                  }
                                 }
-                              }
-                            },
-                      child: Text(
-                        page == pageTitles.length - 1 ? '继续授权' : '继续',
+                              },
+                        child: Text(
+                          page == pageTitles.length - 1 ? '继续授权' : '继续',
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -1124,59 +1449,62 @@ class PermissionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    extendBodyBehindAppBar: true,
     appBar: const _FloatingGlassAppBar(title: Text('照片访问权限')),
-    body: Center(
+    body: SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE5F2FF),
-                borderRadius: BorderRadius.circular(24),
+        padding: const EdgeInsets.fromLTRB(28, 52, 28, 28),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5F2FF),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.photo_library_outlined,
+                  color: _systemBlue,
+                  size: 42,
+                ),
               ),
-              child: const Icon(
-                Icons.photo_library_outlined,
-                color: _systemBlue,
-                size: 42,
+              const SizedBox(height: 28),
+              const Text(
+                '允许访问照片',
+                style: TextStyle(
+                  color: _primaryLabel,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
               ),
-            ),
-            const SizedBox(height: 28),
-            const Text(
-              '允许访问照片',
-              style: TextStyle(
-                color: _primaryLabel,
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
+              const SizedBox(height: 10),
+              const Text(
+                '需要照片访问权限才能整理相册。你也可以只选择部分照片。',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _secondaryLabel,
+                  fontSize: 17,
+                  height: 1.4,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              '需要照片访问权限才能整理相册。你也可以只选择部分照片。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _secondaryLabel,
-                fontSize: 17,
-                height: 1.4,
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: app.requestPermission,
+                  child: const Text('继续'),
+                ),
               ),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: app.requestPermission,
-                child: const Text('继续'),
+              TextButton(
+                onPressed: app.managePermission,
+                child: const Text('前往系统设置'),
               ),
-            ),
-            TextButton(
-              onPressed: app.managePermission,
-              child: const Text('前往系统设置'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),
@@ -2608,6 +2936,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
+          SafeArea(bottom: false, child: _tabBody()),
           const Positioned(
             left: 0,
             right: 0,
@@ -2615,7 +2944,6 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 96,
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
-          SafeArea(bottom: false, child: _tabBody()),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -3077,6 +3405,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
+    extendBodyBehindAppBar: true,
     appBar: _MediaGradientAppBar(
       title: title,
       subtitle: selecting
@@ -3084,23 +3413,11 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
           : '${records?.length ?? total} 个项目',
       actions: [
         if (!selecting)
-          Padding(
-            padding: const EdgeInsets.only(right: 2),
-            child: Center(
-              child: IconButton(
-                key: const Key('album-start-review'),
-                tooltip: '开始整理',
-                onPressed: records?.isNotEmpty == true && !queueing
-                    ? _review
-                    : null,
-                style: IconButton.styleFrom(
-                  foregroundColor: _systemBlue,
-                  disabledForegroundColor: _tertiaryLabel,
-                  backgroundColor: Colors.transparent,
-                ),
-                icon: const Icon(Icons.swipe_rounded),
-              ),
-            ),
+          _HeaderBrowseButton(
+            key: const Key('album-start-review'),
+            onPressed: records?.isNotEmpty == true && !queueing
+                ? _review
+                : null,
           ),
         _HeaderSelectButton(
           selecting: selecting,
@@ -3127,7 +3444,12 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
           _DragSelectableGrid(
             gridKey: const Key('album-media-grid'),
             controller: gridController,
-            padding: const EdgeInsets.fromLTRB(4, 6, 4, 82),
+            padding: EdgeInsets.fromLTRB(
+              4,
+              _mediaHeaderInset(context) + 6,
+              4,
+              82,
+            ),
             crossAxisCount: _photoGridColumnCount(
               MediaQuery.sizeOf(context).width,
             ),
@@ -3339,117 +3661,142 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
     ),
   );
 
-  Widget _results() => Column(
-    children: [
-      if (refreshing) ...[
-        const LinearProgressIndicator(minHeight: 2),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  total == 0 ? '正在检查新增或修改的照片' : '正在更新 $processed / $total 张',
-                  style: const TextStyle(color: _secondaryLabel, fontSize: 12),
-                ),
-              ),
-              TextButton(
-                onPressed: cancelRequested ? null : _cancel,
-                child: Text(cancelRequested ? '正在停止…' : '停止'),
-              ),
-            ],
-          ),
+  Widget _results() {
+    final currentGroups = groups!;
+    return CustomScrollView(
+      key: const Key('similar-groups'),
+      slivers: [
+        SliverToBoxAdapter(
+          child: SizedBox(height: _floatingHeaderInset(context)),
         ),
-      ],
-      if (cancelled)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
-          child: Row(
-            children: [
-              const Expanded(child: Text('分析已停止，当前显示上次结果')),
-              TextButton(onPressed: _load, child: const Text('重新分析')),
-            ],
-          ),
-        ),
-      if (failed)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
-          child: Row(
-            children: [
-              const Expanded(child: Text('更新失败，当前显示上次结果')),
-              TextButton(onPressed: _load, child: const Text('重试')),
-            ],
-          ),
-        ),
-      Expanded(
-        child: groups!.isEmpty
-            ? const Center(child: Text('暂未发现相似照片'))
-            : ListView.separated(
-                key: const Key('similar-groups'),
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                itemCount: groups!.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 22),
-                itemBuilder: (context, groupIndex) {
-                  final group = groups![groupIndex];
-                  return _SimilarPhotoGroupCard(
-                    key: ValueKey('similar-group-${group.items.first.id}'),
-                    app: widget.app,
-                    group: group,
-                    groupIndex: groupIndex,
-                    onReview: (index) => _review(group, index),
-                  );
-                },
+        if (generatedAt != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: Text(
+                '最近分析 ${_formatSimilarityGeneratedAt(generatedAt!)}',
+                style: const TextStyle(color: _secondaryLabel, fontSize: 12),
               ),
-      ),
-    ],
-  );
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: const _FloatingGlassAppBar(title: Text('相似照片')),
-    body: groups != null
-        ? Column(
-            children: [
-              if (generatedAt != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
+            ),
+          ),
+        if (refreshing) ...[
+          const SliverToBoxAdapter(
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+              child: Row(
+                children: [
+                  Expanded(
                     child: Text(
-                      '最近分析 ${_formatSimilarityGeneratedAt(generatedAt!)}',
+                      total == 0
+                          ? '正在检查新增或修改的照片'
+                          : '正在更新 $processed / $total 张',
                       style: const TextStyle(
                         color: _secondaryLabel,
                         fontSize: 12,
                       ),
                     ),
                   ),
-                ),
-              Expanded(child: _results()),
-            ],
+                  TextButton(
+                    onPressed: cancelRequested ? null : _cancel,
+                    child: Text(cancelRequested ? '正在停止…' : '停止'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (cancelled)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+              child: Row(
+                children: [
+                  const Expanded(child: Text('分析已停止，当前显示上次结果')),
+                  TextButton(onPressed: _load, child: const Text('重新分析')),
+                ],
+              ),
+            ),
+          ),
+        if (failed)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+              child: Row(
+                children: [
+                  const Expanded(child: Text('更新失败，当前显示上次结果')),
+                  TextButton(onPressed: _load, child: const Text('重试')),
+                ],
+              ),
+            ),
+          ),
+        if (currentGroups.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('暂未发现相似照片')),
           )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, itemIndex) {
+                if (itemIndex.isOdd) return const SizedBox(height: 22);
+                final groupIndex = itemIndex ~/ 2;
+                final group = currentGroups[groupIndex];
+                return _SimilarPhotoGroupCard(
+                  key: ValueKey('similar-group-${group.items.first.id}'),
+                  app: widget.app,
+                  group: group,
+                  groupIndex: groupIndex,
+                  onReview: (index) => _review(group, index),
+                );
+              }, childCount: currentGroups.length * 2 - 1),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    extendBodyBehindAppBar: true,
+    appBar: const _FloatingGlassAppBar(title: Text('相似照片')),
+    body: groups != null
+        ? _results()
         : failed
-        ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('相似照片分析失败'),
-                const SizedBox(height: 12),
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-              ],
+        ? Padding(
+            padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('相似照片分析失败'),
+                  const SizedBox(height: 12),
+                  OutlinedButton(onPressed: _load, child: const Text('重试')),
+                ],
+              ),
             ),
           )
         : cancelled
-        ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('已停止相似照片分析'),
-                const SizedBox(height: 12),
-                OutlinedButton(onPressed: _load, child: const Text('重新分析')),
-              ],
+        ? Padding(
+            padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('已停止相似照片分析'),
+                  const SizedBox(height: 12),
+                  OutlinedButton(onPressed: _load, child: const Text('重新分析')),
+                ],
+              ),
             ),
           )
-        : _loading(),
+        : Padding(
+            padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+            child: _loading(),
+          ),
   );
 }
 
@@ -3820,7 +4167,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
         if (!mounted || !gridController.hasClients) return;
         final columns = _photoGridColumnCount(MediaQuery.sizeOf(context).width);
         const horizontalPadding = 8.0;
-        const topPadding = 6.0;
+        final topPadding = _mediaHeaderInset(context) + 6;
         const spacing = 4.0;
         final itemExtent =
             (MediaQuery.sizeOf(context).width -
@@ -3986,7 +4333,12 @@ class _ScopeScreenState extends State<ScopeScreen> {
       onNotification: _handleScroll,
       child: GridView.builder(
         key: ValueKey('library-${libraryTimeMode.name}-grid'),
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 116),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          _mediaHeaderInset(context) + 4,
+          20,
+          116,
+        ),
         itemCount: periods.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -4085,9 +4437,14 @@ class _ScopeScreenState extends State<ScopeScreen> {
     }
     final items = selectionItems;
     final itemCount = selecting && items != null ? items.length : count;
+    final showsPendingFilter =
+        !selecting &&
+        !showingAlbums &&
+        libraryTimeMode == _LibraryTimeMode.all &&
+        widget.app.downAction == DownSwipeAction.pending;
     final padding = EdgeInsets.fromLTRB(
       4,
-      6,
+      _mediaHeaderInset(context) + (showsPendingFilter ? 50 : 6),
       4,
       widget.scope.key == Scope.all.key && !pendingOnly ? 116 : 82,
     );
@@ -4129,7 +4486,12 @@ class _ScopeScreenState extends State<ScopeScreen> {
   }
 
   Widget _content() {
-    if (showingAlbums) return _LibraryAlbumsView(widget.app);
+    if (showingAlbums) {
+      return _LibraryAlbumsView(
+        widget.app,
+        topPadding: _mediaHeaderInset(context),
+      );
+    }
     if (libraryTimeMode != _LibraryTimeMode.all) return _periodGrid();
     return _mediaGrid();
   }
@@ -4231,10 +4593,17 @@ class _ScopeScreenState extends State<ScopeScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
+    extendBodyBehindAppBar: true,
     appBar: _MediaGradientAppBar(
       title: widget.scope.label,
       subtitle: selecting ? '已选择 ${selected.length} 项' : '$count 个项目',
       actions: [
+        if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
+          if (!selecting)
+            _HeaderBrowseButton(
+              key: const Key('media-browse-button'),
+              onPressed: count == 0 || queueing ? null : () => _open(null),
+            ),
         if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
           _HeaderSelectButton(
             selecting: selecting,
@@ -4246,38 +4615,36 @@ class _ScopeScreenState extends State<ScopeScreen> {
     ),
     body: Stack(
       children: [
-        Column(
-          children: [
-            if (!selecting &&
-                !showingAlbums &&
-                libraryTimeMode == _LibraryTimeMode.all &&
-                widget.app.downAction == DownSwipeAction.pending)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    key: const Key('pending-filter-entry'),
-                    onPressed: () {
-                      setState(() {
-                        pendingOnly = !pendingOnly;
-                        _leaveSelection();
-                      });
-                      _refresh();
-                    },
-                    icon: Icon(
-                      pendingOnly
-                          ? Icons.photo_library_outlined
-                          : Icons.schedule_outlined,
-                      size: 18,
-                    ),
-                    label: Text(pendingOnly ? '返回全部' : '待定 $pendingCount'),
-                  ),
+        Positioned.fill(child: _content()),
+        if (!selecting &&
+            !showingAlbums &&
+            libraryTimeMode == _LibraryTimeMode.all &&
+            widget.app.downAction == DownSwipeAction.pending)
+          Positioned(
+            top: _mediaHeaderInset(context) + 4,
+            right: 12,
+            child: _GlassSurface(
+              radius: 16,
+              child: TextButton.icon(
+                key: const Key('pending-filter-entry'),
+                onPressed: () {
+                  setState(() {
+                    pendingOnly = !pendingOnly;
+                    _leaveSelection();
+                  });
+                  _refresh();
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                icon: Icon(
+                  pendingOnly
+                      ? Icons.photo_library_outlined
+                      : Icons.schedule_outlined,
+                  size: 18,
                 ),
+                label: Text(pendingOnly ? '返回全部' : '待定 $pendingCount'),
               ),
-            Expanded(child: _content()),
-          ],
-        ),
+            ),
+          ),
         if (widget.scope.key == Scope.all.key && !pendingOnly && !selecting)
           _libraryControls(),
         if (selecting)
@@ -4297,21 +4664,10 @@ class _LibraryGlassControl extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(16),
-    child: BackdropFilter(
-      filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-      child: SizedBox(
-        height: 52,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0xE6F9F9F9),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: child,
-        ),
-      ),
-    ),
+  Widget build(BuildContext context) => _GlassSurface(
+    color: _lightGlass,
+    radius: 16,
+    child: SizedBox(height: 52, child: child),
   );
 }
 
@@ -4441,9 +4797,10 @@ class _LibraryPeriodCard extends StatelessWidget {
 }
 
 class _LibraryAlbumsView extends StatefulWidget {
-  const _LibraryAlbumsView(this.app);
+  const _LibraryAlbumsView(this.app, {this.topPadding = 0});
 
   final CleanerState app;
+  final double topPadding;
 
   @override
   State<_LibraryAlbumsView> createState() => _LibraryAlbumsViewState();
@@ -4542,7 +4899,7 @@ class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
       if (items.isEmpty) return const Center(child: Text('还没有可浏览的相册'));
       return ListView(
         key: const Key('library-albums-view'),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 116),
+        padding: EdgeInsets.fromLTRB(20, widget.topPadding, 20, 116),
         children: [
           _section(
             '手机相册',
@@ -4674,7 +5031,6 @@ class _ReviewScreenState extends State<ReviewScreen>
   int total = 0;
   MediaRecord? current;
   Uint8List? currentPreview;
-  Size? currentMediaSize;
   MediaRecord? incoming;
   Uint8List? incomingPreview;
   MediaRecord? previousItem;
@@ -4682,7 +5038,6 @@ class _ReviewScreenState extends State<ReviewScreen>
   MediaRecord? nextItem;
   Uint8List? nextPreview;
   final Map<String, Future<Uint8List?>> previewCache = {};
-  final Map<String, Future<Size?>> mediaSizeCache = {};
   final Map<int, Future<MediaRecord?>> filmstripItemCache = {};
   final ScrollController filmstripController = ScrollController();
   bool filmstripUserScrolling = false;
@@ -4698,9 +5053,6 @@ class _ReviewScreenState extends State<ReviewScreen>
   double actionScale = 1;
   int browseDirection = 1;
   double zoom = 1;
-  double scaleStartZoom = 1;
-  Offset zoomOffset = Offset.zero;
-  Offset doubleTapPosition = Offset.zero;
   final ValueNotifier<int> gestureFrame = ValueNotifier(0);
   List<MediaRecord>? sourceItems;
   late final List<MediaRecord>? sourceOrder;
@@ -4887,13 +5239,11 @@ class _ReviewScreenState extends State<ReviewScreen>
 
   Future<void> _load() async {
     final (item, preview) = await _loadAt(index);
-    final mediaSize = item == null ? null : await _mediaSize(item.id, preview);
     final favorite = item != null && await widget.app.store.isFavorite(item.id);
     if (!mounted) return;
     setState(() {
       current = item;
       currentPreview = preview;
-      currentMediaSize = mediaSize;
       currentFavorite = favorite;
       incoming = null;
       incomingPreview = null;
@@ -4902,7 +5252,6 @@ class _ReviewScreenState extends State<ReviewScreen>
       nextItem = null;
       nextPreview = null;
       zoom = 1;
-      zoomOffset = Offset.zero;
       actionScale = 1;
       dragAxis = null;
       panOffset = Offset.zero;
@@ -4987,7 +5336,6 @@ class _ReviewScreenState extends State<ReviewScreen>
     try {
       final (loadedItem, loadedPreview) = await _loadAt(target);
       if (loadedItem == null) return;
-      final loadedMediaSize = await _mediaSize(loadedItem.id, loadedPreview);
       final loadedFavorite = await widget.app.store.isFavorite(loadedItem.id);
       if (!mounted || request != filmstripSelectionRequest) return;
       browseDirection = target > index ? 1 : -1;
@@ -4995,7 +5343,6 @@ class _ReviewScreenState extends State<ReviewScreen>
         index = target;
         current = loadedItem;
         currentPreview = loadedPreview;
-        currentMediaSize = loadedMediaSize;
         currentFavorite = loadedFavorite;
         incoming = null;
         incomingPreview = null;
@@ -5005,7 +5352,6 @@ class _ReviewScreenState extends State<ReviewScreen>
         nextPreview = null;
         dragOffset = Offset.zero;
         zoom = 1;
-        zoomOffset = Offset.zero;
         actionScale = 1;
         dragAxis = null;
         panOffset = Offset.zero;
@@ -5043,21 +5389,6 @@ class _ReviewScreenState extends State<ReviewScreen>
     }
     return future;
   }
-
-  Future<Size?> _mediaSize(String id, Uint8List? bytes) =>
-      mediaSizeCache.putIfAbsent(id, () async {
-        if (bytes == null || bytes.isEmpty) return null;
-        final codec = await ui.instantiateImageCodec(bytes);
-        try {
-          final frame = await codec.getNextFrame();
-          return Size(
-            frame.image.width.toDouble(),
-            frame.image.height.toDouble(),
-          );
-        } finally {
-          codec.dispose();
-        }
-      });
 
   Future<(MediaRecord?, Uint8List?)> _loadAt(int target) async {
     final item = await _itemAt(target);
@@ -5164,7 +5495,6 @@ class _ReviewScreenState extends State<ReviewScreen>
           : Future<Uint8List?>.value(cachedPreview);
       final favorite = widget.app.store.isFavorite(loadedItem.id);
       final loadedPreview = await preview;
-      final loadedMediaSize = await _mediaSize(loadedItem.id, loadedPreview);
       final loadedFavorite = await favorite;
       await animation;
       index = next;
@@ -5172,7 +5502,6 @@ class _ReviewScreenState extends State<ReviewScreen>
         setState(() {
           current = loadedItem;
           currentPreview = loadedPreview;
-          currentMediaSize = loadedMediaSize;
           currentFavorite = loadedFavorite;
           incoming = null;
           incomingPreview = null;
@@ -5182,7 +5511,6 @@ class _ReviewScreenState extends State<ReviewScreen>
           nextPreview = null;
           dragOffset = Offset.zero;
           zoom = 1;
-          zoomOffset = Offset.zero;
           actionScale = 1;
           dragAxis = null;
           panOffset = Offset.zero;
@@ -5252,9 +5580,6 @@ class _ReviewScreenState extends State<ReviewScreen>
         index = next;
       }
       final (loadedItem, loadedPreview) = await _loadAt(index);
-      final loadedMediaSize = loadedItem == null
-          ? null
-          : await _mediaSize(loadedItem.id, loadedPreview);
       final loadedFavorite =
           loadedItem != null &&
           await widget.app.store.isFavorite(loadedItem.id);
@@ -5268,7 +5593,6 @@ class _ReviewScreenState extends State<ReviewScreen>
         setState(() {
           current = loadedItem;
           currentPreview = loadedPreview;
-          currentMediaSize = loadedMediaSize;
           currentFavorite = loadedFavorite;
           incoming = null;
           incomingPreview = null;
@@ -5278,7 +5602,6 @@ class _ReviewScreenState extends State<ReviewScreen>
           nextPreview = null;
           dragOffset = Offset.zero;
           zoom = 1;
-          zoomOffset = Offset.zero;
           actionScale = 1;
           dragAxis = null;
           panOffset = Offset.zero;
@@ -5396,81 +5719,6 @@ class _ReviewScreenState extends State<ReviewScreen>
     await _returnToCenter(velocity: speed.distance);
   }
 
-  void _onScaleStart(ScaleStartDetails details) {
-    scaleStartZoom = zoom;
-    if (zoom == 1) {
-      dragAxis = null;
-      panOffset = Offset.zero;
-    }
-  }
-
-  Offset _clampZoomOffset(Offset offset, double scale, Size stageSize) {
-    if (scale <= 1) return Offset.zero;
-    final available = Size(
-      (stageSize.width - 32).clamp(1.0, double.infinity),
-      (stageSize.height - 32).clamp(1.0, double.infinity),
-    );
-    final source = currentMediaSize;
-    final displayed = source == null
-        ? available
-        : applyBoxFit(BoxFit.contain, source, available).destination;
-    final horizontal = (displayed.width * scale - stageSize.width) / 2;
-    final vertical = (displayed.height * scale - stageSize.height) / 2;
-    final maxX = horizontal > 0 ? horizontal : 0.0;
-    final maxY = vertical > 0 ? vertical : 0.0;
-    return Offset(
-      offset.dx.clamp(-maxX, maxX).toDouble(),
-      offset.dy.clamp(-maxY, maxY).toDouble(),
-    );
-  }
-
-  void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (busy || current == null) return;
-    if (details.pointerCount == 1 && zoom == 1 && details.scale == 1) {
-      _onPanUpdate(details.focalPointDelta);
-      return;
-    }
-    final size = MediaQuery.sizeOf(context);
-    final nextZoom = (scaleStartZoom * details.scale).clamp(1.0, 4.0);
-    final scaleChange = nextZoom / zoom;
-    final focalPoint =
-        details.localFocalPoint - Offset(size.width / 2, size.height / 2);
-    var nextOffset =
-        (zoomOffset - focalPoint) * scaleChange +
-        focalPoint +
-        details.focalPointDelta;
-    nextOffset = _clampZoomOffset(nextOffset, nextZoom, size);
-    zoom = nextZoom;
-    zoomOffset = nextOffset;
-    dragOffset = Offset.zero;
-    dragAxis = null;
-    panOffset = Offset.zero;
-    gestureFrame.value++;
-  }
-
-  Future<void> _onScaleEnd(ScaleEndDetails details) async {
-    if (zoom > 1) return;
-    await _onPanEnd(details.velocity);
-  }
-
-  void _onDoubleTap() {
-    final size = MediaQuery.sizeOf(context);
-    setState(() {
-      if (zoom > 1) {
-        zoom = 1;
-        zoomOffset = Offset.zero;
-      } else {
-        zoom = 2.5;
-        final focalPoint =
-            doubleTapPosition - Offset(size.width / 2, size.height / 2);
-        zoomOffset = _clampZoomOffset(focalPoint * (1 - zoom), zoom, size);
-      }
-      dragOffset = Offset.zero;
-      dragAxis = null;
-      panOffset = Offset.zero;
-    });
-  }
-
   Future<void> _undo() async {
     if (busy || undoHistory.isEmpty) return;
     setState(() => busy = true);
@@ -5575,14 +5823,17 @@ class _ReviewScreenState extends State<ReviewScreen>
     Navigator.pop(context, current?.id);
   }
 
-  Widget _mediaStage(MediaRecord item) => GestureDetector(
-    key: const Key('review-gesture'),
-    behavior: HitTestBehavior.opaque,
-    onScaleStart: _onScaleStart,
-    onScaleUpdate: _onScaleUpdate,
-    onScaleEnd: _onScaleEnd,
-    onDoubleTapDown: (details) => doubleTapPosition = details.localPosition,
-    onDoubleTap: _onDoubleTap,
+  Widget _mediaStage(MediaRecord item) => _AppleZoomableMedia(
+    key: ValueKey('review-media-${item.id}'),
+    surfaceKey: const Key('review-gesture'),
+    viewerKey: const Key('review-zoom'),
+    onSwipeUpdate: _onPanUpdate,
+    onSwipeEnd: _onPanEnd,
+    onSwipeCancel: () => unawaited(_returnToCenter()),
+    onZoomChanged: (isZoomed) {
+      zoom = isZoomed ? 2 : 1;
+      gestureFrame.value++;
+    },
     child: ValueListenableBuilder<int>(
       valueListenable: gestureFrame,
       builder: (context, _, _) {
@@ -5618,19 +5869,13 @@ class _ReviewScreenState extends State<ReviewScreen>
               child: Transform.scale(
                 key: const Key('action-media-scale'),
                 scale: actionScale,
-                child: Transform.translate(
-                  offset: zoomOffset,
-                  child: Transform.scale(
-                    scale: zoom,
-                    child: MediaView(
-                      widget.app.media,
-                      item,
-                      key: ValueKey(item.id),
-                      previewBytes: currentPreview,
-                      controlsVisible: zoom <= 1.001,
-                      videoProgressBottom: 142,
-                    ),
-                  ),
+                child: MediaView(
+                  widget.app.media,
+                  item,
+                  key: ValueKey(item.id),
+                  previewBytes: currentPreview,
+                  controlsVisible: zoom <= 1.001,
+                  videoProgressBottom: 142,
                 ),
               ),
             ),
@@ -5794,7 +6039,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                           onPressed: busy ? null : _requestExit,
                           diameter: 44,
                           iconSize: 19,
-                          color: const Color(0xA6000000),
+                          color: _darkGlass,
                         ),
                       ),
                       Align(
@@ -5804,7 +6049,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                             horizontal: 13,
                             vertical: 8,
                           ),
-                          color: const Color(0xA6000000),
+                          color: _darkGlass,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -5878,7 +6123,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     diameter: 44,
                                     iconSize: 20,
                                     color: Color.lerp(
-                                      const Color(0xA6000000),
+                                      _darkGlass,
                                       const Color(0xF2FF3B30),
                                       progress,
                                     )!,
@@ -5954,7 +6199,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     : _toggleFavorite,
                                 color: currentFavorite
                                     ? const Color(0xD9E9A23B)
-                                    : const Color(0xA6000000),
+                                    : _darkGlass,
                               ),
                             const SizedBox(width: 12),
                             _glassIcon(
@@ -5989,33 +6234,8 @@ class _ReviewScreenState extends State<ReviewScreen>
   Widget _glass({
     required Widget child,
     required EdgeInsets padding,
-    Color color = const Color(0xA6000000),
-  }) => DecoratedBox(
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(22),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x26000000),
-          blurRadius: 12,
-          offset: Offset(0, 5),
-        ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: child,
-        ),
-      ),
-    ),
-  );
+    Color color = _darkGlass,
+  }) => _GlassSurface(color: color, radius: 22, padding: padding, child: child);
 
   Widget _glassIcon({
     Key? key,
@@ -6024,20 +6244,15 @@ class _ReviewScreenState extends State<ReviewScreen>
     required VoidCallback? onPressed,
     double diameter = 48,
     double iconSize = 22,
-    Color color = const Color(0xA6000000),
-  }) => _glass(
-    padding: EdgeInsets.zero,
+    Color color = _darkGlass,
+  }) => _GlassIconButton(
+    buttonKey: key,
+    tooltip: tooltip,
+    icon: icon,
+    onPressed: onPressed,
+    diameter: diameter,
+    iconSize: iconSize,
     color: color,
-    child: IconButton(
-      key: key,
-      tooltip: tooltip,
-      onPressed: onPressed,
-      color: Colors.white,
-      disabledColor: Colors.white60,
-      constraints: BoxConstraints.tightFor(width: diameter, height: diameter),
-      padding: EdgeInsets.zero,
-      icon: Icon(icon, size: iconSize),
-    ),
   );
 }
 
@@ -6454,7 +6669,10 @@ class _QueueScreenState extends State<QueueScreen> {
     final column = (columnPosition / stride).floor();
     if (column < 0 || column >= columns) return null;
     final contentY =
-        local.dy + (queueScroll.hasClients ? queueScroll.offset : 0);
+        local.dy +
+        (queueScroll.hasClients ? queueScroll.offset : 0) -
+        (_floatingHeaderInset(context) + 52);
+    if (contentY < 0) return null;
     final row = (contentY / stride).floor();
     final index = row * columns + column;
     return index >= 0 && index < rows.length ? index : null;
@@ -6582,18 +6800,9 @@ class _QueueScreenState extends State<QueueScreen> {
   Future<void> _openPreview(String id) async {
     final asset = await widget.app.media.get(id);
     if (asset == null || !mounted) return;
-    final media = MediaRecord(
-      id: id,
-      takenAt: asset.createDateSecond == null
-          ? 0
-          : asset.createDateSecond! * 1000,
-      month: 'unknown',
-      type: asset.type == AssetType.video ? 2 : 1,
-      duration: asset.duration,
-      screenshot: false,
-      selfie: false,
-      live: asset.isLivePhoto,
-    );
+    final media = _mediaRecordFromAsset(id, asset);
+    final itemIds = rows.map((row) => row['media_id'] as String).toList();
+    final initialIndex = itemIds.indexOf(id);
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -6602,6 +6811,10 @@ class _QueueScreenState extends State<QueueScreen> {
           media,
           onKeep: () => _restore([id]),
           onDelete: () => _process([id]),
+          itemIds: itemIds,
+          initialIndex: initialIndex < 0 ? 0 : initialIndex,
+          onKeepItem: (target) => _restore([target]),
+          onDeleteItem: (target) => _process([target]),
         ),
       ),
     );
@@ -6735,172 +6948,213 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    extendBodyBehindAppBar: true,
     appBar: _FloatingGlassAppBar(
       title: const Text('待删除队列'),
       actions: [
-        TextButton(
-          onPressed: rows.isEmpty || busy
-              ? null
-              : () => setState(() {
-                  if (selected.length == rows.length) {
-                    selected.clear();
-                  } else {
-                    selected.addAll(
-                      rows.map((row) => row['media_id'] as String),
-                    );
-                  }
-                }),
-          child: Text(
-            rows.isNotEmpty && selected.length == rows.length ? '取消全选' : '全选',
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Center(
+            child: _GlassSurface(
+              radius: 18,
+              child: TextButton(
+                onPressed: rows.isEmpty || busy
+                    ? null
+                    : () => setState(() {
+                        if (selected.length == rows.length) {
+                          selected.clear();
+                        } else {
+                          selected.addAll(
+                            rows.map((row) => row['media_id'] as String),
+                          );
+                        }
+                      }),
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                child: Text(
+                  rows.isNotEmpty && selected.length == rows.length
+                      ? '取消全选'
+                      : '全选',
+                ),
+              ),
+            ),
           ),
         ),
       ],
     ),
     body: Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '${rows.length} 项待复核 · 请确认后再交给系统处理',
-              style: const TextStyle(color: _secondaryLabel),
-            ),
-          ),
-        ),
         Expanded(
           child: rows.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.delete_outline,
-                        size: 66,
-                        color: _tertiaryLabel,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        '还没有待删除的照片',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+              ? Padding(
+                  padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 66,
+                          color: _tertiaryLabel,
                         ),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        '上滑只会先加入队列，不会直接删除。',
-                        style: TextStyle(color: _secondaryLabel),
-                      ),
-                    ],
+                        SizedBox(height: 16),
+                        Text(
+                          '还没有待删除的照片',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          '上滑只会先加入队列，不会直接删除。',
+                          style: TextStyle(color: _secondaryLabel),
+                        ),
+                      ],
+                    ),
                   ),
                 )
-              : GridView.builder(
-                  key: queueGridKey,
-                  controller: queueScroll,
-                  physics: selectionPointer == null
-                      ? null
-                      : const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _photoGridColumnCount(
-                      MediaQuery.sizeOf(context).width,
-                    ),
-                    mainAxisSpacing: 4,
-                    crossAxisSpacing: 4,
-                  ),
-                  itemCount: rows.length,
-                  itemBuilder: (context, index) {
-                    final row = rows[index];
-                    final id = row['media_id'] as String;
-                    return ClipRRect(
-                      key: ValueKey('queue-item-$id'),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          GestureDetector(
-                            onTap: () => _openPreview(id),
-                            child: MediaThumb(
-                              widget.app.media,
-                              id,
-                              width: 360,
-                              height: 360,
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            top: 2,
-                            child: Listener(
-                              key: ValueKey('queue-select-$id'),
-                              onPointerDown: (event) =>
-                                  _selectionPointerDown(index, event),
-                              onPointerMove: _selectionPointerMove,
-                              onPointerUp: _selectionPointerEnd,
-                              onPointerCancel: _selectionPointerEnd,
-                              child: SizedBox.square(
-                                dimension: 44,
-                                child: Transform.scale(
-                                  scale: 0.95,
-                                  child: Checkbox(
-                                    value: selected.contains(id),
-                                    visualDensity: VisualDensity.compact,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    fillColor: WidgetStateProperty.resolveWith(
-                                      (states) =>
-                                          states.contains(WidgetState.selected)
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                          : Colors.black45,
-                                    ),
-                                    side: const BorderSide(color: Colors.white),
-                                    onChanged: (value) {
-                                      if (suppressCheckboxId == id) return;
-                                      setState(() {
-                                        if (value == true) {
-                                          selected.add(id);
-                                        } else {
-                                          selected.remove(id);
-                                        }
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (row['status'] == 'unknown' ||
-                              row['status'] == 'missing')
-                            Positioned(
-                              left: 5,
-                              top: 5,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 3,
-                                  ),
-                                  child: Text(
-                                    row['status'] == 'missing' ? '不可访问' : '待核对',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+              : Stack(
+                  children: [
+                    GridView.builder(
+                      key: queueGridKey,
+                      controller: queueScroll,
+                      physics: selectionPointer == null
+                          ? null
+                          : const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        8,
+                        _floatingHeaderInset(context) + 52,
+                        8,
+                        0,
                       ),
-                    );
-                  },
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: _photoGridColumnCount(
+                          MediaQuery.sizeOf(context).width,
+                        ),
+                        mainAxisSpacing: 4,
+                        crossAxisSpacing: 4,
+                      ),
+                      itemCount: rows.length,
+                      itemBuilder: (context, index) {
+                        final row = rows[index];
+                        final id = row['media_id'] as String;
+                        return ClipRRect(
+                          key: ValueKey('queue-item-$id'),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              GestureDetector(
+                                onTap: () => _openPreview(id),
+                                child: MediaThumb(
+                                  widget.app.media,
+                                  id,
+                                  width: 360,
+                                  height: 360,
+                                ),
+                              ),
+                              Positioned(
+                                right: 0,
+                                top: 2,
+                                child: Listener(
+                                  key: ValueKey('queue-select-$id'),
+                                  onPointerDown: (event) =>
+                                      _selectionPointerDown(index, event),
+                                  onPointerMove: _selectionPointerMove,
+                                  onPointerUp: _selectionPointerEnd,
+                                  onPointerCancel: _selectionPointerEnd,
+                                  child: SizedBox.square(
+                                    dimension: 44,
+                                    child: Transform.scale(
+                                      scale: 0.95,
+                                      child: Checkbox(
+                                        value: selected.contains(id),
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        fillColor:
+                                            WidgetStateProperty.resolveWith(
+                                              (states) =>
+                                                  states.contains(
+                                                    WidgetState.selected,
+                                                  )
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                  : Colors.black45,
+                                            ),
+                                        side: const BorderSide(
+                                          color: Colors.white,
+                                        ),
+                                        onChanged: (value) {
+                                          if (suppressCheckboxId == id) return;
+                                          setState(() {
+                                            if (value == true) {
+                                              selected.add(id);
+                                            } else {
+                                              selected.remove(id);
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (row['status'] == 'unknown' ||
+                                  row['status'] == 'missing')
+                                Positioned(
+                                  left: 5,
+                                  top: 5,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      child: Text(
+                                        row['status'] == 'missing'
+                                            ? '不可访问'
+                                            : '待核对',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: _floatingHeaderInset(context) + 4,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _GlassSurface(
+                          color: _lightGlass,
+                          radius: 15,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            '${rows.length} 项待复核 · 请确认后再交给系统处理',
+                            style: const TextStyle(color: _secondaryLabel),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         ),
         Padding(
@@ -6951,68 +7205,261 @@ class QueuePreviewScreen extends StatefulWidget {
     super.key,
     required this.onKeep,
     required this.onDelete,
+    this.itemIds,
+    this.initialIndex = 0,
+    this.onKeepItem,
+    this.onDeleteItem,
   });
 
   final MediaRepository media;
   final MediaRecord item;
   final Future<bool> Function() onKeep;
   final Future<bool> Function() onDelete;
+  final List<String>? itemIds;
+  final int initialIndex;
+  final Future<bool> Function(String id)? onKeepItem;
+  final Future<bool> Function(String id)? onDeleteItem;
 
   @override
   State<QueuePreviewScreen> createState() => _QueuePreviewScreenState();
 }
 
-class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
-  final transformation = TransformationController();
-  final pointers = <int>{};
-  Offset swipeOffset = Offset.zero;
+class _QueuePreviewScreenState extends State<QueuePreviewScreen>
+    with SingleTickerProviderStateMixin {
+  late final List<String> ids;
+  late int index;
+  late final AnimationController motion;
+  late Animation<Offset> motionAnimation;
+  final records = <String, Future<MediaRecord?>>{};
+  Offset dragOffset = Offset.zero;
+  Offset panOffset = Offset.zero;
+  Axis? dragAxis;
+  int browseDirection = 1;
   bool zoomed = false;
   bool busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    ids = List<String>.of(widget.itemIds ?? [widget.item.id]);
+    if (ids.isEmpty) ids.add(widget.item.id);
+    index = widget.initialIndex.clamp(0, ids.length - 1);
+    records[widget.item.id] = Future.value(widget.item);
+    motion =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 220),
+        )..addListener(() {
+          if (mounted) setState(() => dragOffset = motionAnimation.value);
+        });
+    motionAnimation = const AlwaysStoppedAnimation(Offset.zero);
+  }
+
+  @override
   void dispose() {
-    transformation.dispose();
+    motion.dispose();
     super.dispose();
   }
 
-  void _updateZoom() {
-    final next = transformation.value.getMaxScaleOnAxis() > 1.01;
-    if (next != zoomed) setState(() => zoomed = next);
-  }
+  Future<MediaRecord?> _record(String id) => records.putIfAbsent(id, () async {
+    final asset = await widget.media.get(id);
+    return asset == null ? null : _mediaRecordFromAsset(id, asset);
+  });
 
-  void _finishSwipe() {
-    if (!zoomed &&
-        swipeOffset.dy > 80 &&
-        swipeOffset.dy > swipeOffset.dx.abs() * 1.25) {
-      Navigator.maybePop(context);
+  void _onSwipeUpdate(Offset delta) {
+    if (busy || zoomed) return;
+    panOffset += delta;
+    if (dragAxis == null && panOffset.distance < 8) return;
+    if (dragAxis == null) {
+      final horizontal = panOffset.dx.abs();
+      final vertical = panOffset.dy.abs();
+      final larger = horizontal >= vertical ? horizontal : vertical;
+      final smaller = horizontal >= vertical ? vertical : horizontal;
+      if (larger < smaller * 1.25 && panOffset.distance < 24) return;
+      dragAxis = horizontal >= vertical ? Axis.horizontal : Axis.vertical;
     }
-    swipeOffset = Offset.zero;
+    setState(() {
+      dragOffset = dragAxis == Axis.horizontal
+          ? Offset(panOffset.dx, 0)
+          : Offset(0, panOffset.dy);
+      if (dragAxis == Axis.horizontal) {
+        browseDirection = dragOffset.dx < 0 ? 1 : -1;
+      }
+    });
   }
 
-  Future<void> _act(Future<bool> Function() action) async {
+  Future<void> _animateTo(Offset target, {double velocity = 0}) async {
+    final distance = (target - dragOffset).distance;
+    motion.duration = velocity <= 0
+        ? const Duration(milliseconds: 220)
+        : Duration(
+            milliseconds: (distance / velocity * 1000).round().clamp(140, 240),
+          );
+    motionAnimation = Tween<Offset>(
+      begin: dragOffset,
+      end: target,
+    ).animate(CurvedAnimation(parent: motion, curve: Curves.easeOutCubic));
+    await motion.forward(from: 0);
+  }
+
+  Future<void> _returnToCenter({double velocity = 0}) async {
+    if (dragOffset != Offset.zero) {
+      await _animateTo(Offset.zero, velocity: velocity);
+    }
+    if (!mounted) return;
+    setState(() {
+      dragOffset = Offset.zero;
+      panOffset = Offset.zero;
+      dragAxis = null;
+    });
+  }
+
+  Future<void> _move(int amount, {double velocity = 0}) async {
+    final next = index + amount;
+    if (next < 0 || next >= ids.length) {
+      await _returnToCenter(velocity: velocity);
+      return;
+    }
+    browseDirection = amount;
+    unawaited(_record(ids[next]));
+    final width = MediaQuery.sizeOf(context).width;
+    await _animateTo(
+      Offset(amount > 0 ? -width : width, 0),
+      velocity: velocity,
+    );
+    if (!mounted) return;
+    setState(() {
+      index = next;
+      dragOffset = Offset.zero;
+      panOffset = Offset.zero;
+      dragAxis = null;
+      zoomed = false;
+    });
+  }
+
+  Future<void> _onSwipeEnd(Velocity velocity) async {
+    if (busy || zoomed) return;
+    final speed = velocity.pixelsPerSecond;
+    if (dragAxis == Axis.vertical) {
+      final shouldClose =
+          dragOffset.dy >= 80 ||
+          (dragOffset.dy >= 24 &&
+              speed.dy >= 900 &&
+              speed.dy.abs() >= speed.dx.abs() * 1.2);
+      if (shouldClose) {
+        Navigator.maybePop(context);
+      } else {
+        await _returnToCenter(velocity: speed.distance);
+      }
+      return;
+    }
+    final threshold = (MediaQuery.sizeOf(context).width * 0.16).clamp(
+      52.0,
+      68.0,
+    );
+    final shouldMove =
+        dragOffset.dx.abs() >= threshold ||
+        (dragOffset.dx.abs() >= 24 &&
+            speed.dx.abs() >= 700 &&
+            speed.dx.abs() >= speed.dy.abs() * 1.2);
+    if (dragAxis == Axis.horizontal && shouldMove) {
+      await _move(dragOffset.dx < 0 ? 1 : -1, velocity: speed.dx.abs());
+    } else {
+      await _returnToCenter(velocity: speed.distance);
+    }
+  }
+
+  Future<void> _act({required bool keep}) async {
     if (busy) return;
     setState(() => busy = true);
     try {
-      final changed = await action();
-      if (changed && mounted) Navigator.pop(context);
+      final id = ids[index];
+      final changed = await (keep
+          ? widget.onKeepItem?.call(id) ?? widget.onKeep()
+          : widget.onDeleteItem?.call(id) ?? widget.onDelete());
+      if (!changed || !mounted) return;
+      if (ids.length == 1) {
+        Navigator.pop(context);
+        return;
+      }
+      setState(() {
+        ids.removeAt(index);
+        if (index >= ids.length) index = ids.length - 1;
+        dragOffset = Offset.zero;
+        panOffset = Offset.zero;
+        dragAxis = null;
+        zoomed = false;
+      });
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
-  Widget _glass({required Widget child, EdgeInsets? padding}) => ClipRRect(
-    borderRadius: BorderRadius.circular(20),
-    child: BackdropFilter(
-      filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0x52000000),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+  Widget _media(String id, {bool autoplay = true}) =>
+      FutureBuilder<MediaRecord?>(
+        future: _record(id),
+        builder: (context, snapshot) {
+          final item = snapshot.data;
+          if (item == null) {
+            return Center(
+              child: snapshot.connectionState == ConnectionState.waiting
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text(
+                      '无法读取此媒体',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+            );
+          }
+          return MediaView(
+            widget.media,
+            item,
+            key: ValueKey('queue-preview-media-$id'),
+            autoplay: autoplay,
+            controlsVisible: !zoomed,
+            videoProgressBottom: 142,
+          );
+        },
+      );
+
+  Widget _mediaStage() {
+    final width = MediaQuery.sizeOf(context).width;
+    final currentId = ids[index];
+    final horizontal = dragAxis == Axis.horizontal && dragOffset.dx != 0;
+    final incomingIndex = index + browseDirection;
+    final incomingId =
+        horizontal && incomingIndex >= 0 && incomingIndex < ids.length
+        ? ids[incomingIndex]
+        : null;
+    return _AppleZoomableMedia(
+      key: ValueKey('queue-zoom-$currentId'),
+      surfaceKey: const Key('queue-preview-surface'),
+      viewerKey: const Key('queue-preview-zoom'),
+      onSwipeUpdate: _onSwipeUpdate,
+      onSwipeEnd: _onSwipeEnd,
+      onSwipeCancel: () => unawaited(_returnToCenter()),
+      onZoomChanged: (value) {
+        if (mounted && zoomed != value) setState(() => zoomed = value);
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (incomingId != null)
+            Transform.translate(
+              offset: Offset(
+                dragOffset.dx + (browseDirection > 0 ? width : -width),
+                0,
+              ),
+              child: _media(incomingId, autoplay: false),
+            ),
+          Transform.translate(
+            key: const Key('queue-preview-drag-translation'),
+            offset: dragOffset,
+            child: _media(currentId),
+          ),
+        ],
       ),
-    ),
-  );
+    );
+  }
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
@@ -7025,45 +7472,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Listener(
-            key: const Key('queue-preview-surface'),
-            onPointerDown: (event) {
-              pointers.add(event.pointer);
-              if (pointers.length == 1) swipeOffset = Offset.zero;
-            },
-            onPointerMove: (event) {
-              if (pointers.length == 1 && !zoomed) {
-                swipeOffset += event.delta;
-              }
-            },
-            onPointerUp: (event) {
-              final wasSinglePointer = pointers.length == 1;
-              pointers.remove(event.pointer);
-              if (wasSinglePointer) _finishSwipe();
-            },
-            onPointerCancel: (event) {
-              pointers.remove(event.pointer);
-              swipeOffset = Offset.zero;
-            },
-            child: InteractiveViewer(
-              key: const Key('queue-preview-zoom'),
-              transformationController: transformation,
-              minScale: 1,
-              maxScale: 4,
-              panEnabled: zoomed,
-              boundaryMargin: EdgeInsets.zero,
-              onInteractionUpdate: (_) => _updateZoom(),
-              onInteractionEnd: (_) {
-                if (transformation.value.getMaxScaleOnAxis() <= 1.01) {
-                  transformation.value = Matrix4.identity();
-                }
-                _updateZoom();
-              },
-              child: SizedBox.expand(
-                child: MediaView(widget.media, widget.item),
-              ),
-            ),
-          ),
+          _mediaStage(),
           const Positioned(
             left: 0,
             right: 0,
@@ -7071,99 +7480,121 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
             height: 112,
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
-          SafeArea(
-            minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-            child: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: _glass(
-                    child: IconButton(
-                      key: const Key('queue-preview-back'),
+          Visibility(
+            visible: !zoomed,
+            child: SafeArea(
+              minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+              child: Stack(
+                children: [
+                  Align(
+                    alignment: Alignment.topLeft,
+                    child: _GlassIconButton(
+                      buttonKey: const Key('queue-preview-back'),
                       tooltip: '返回待删除列表',
-                      onPressed: () => Navigator.maybePop(context),
-                      color: Colors.white,
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      onPressed: busy
+                          ? null
+                          : () => Navigator.maybePop(context),
                     ),
                   ),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _glass(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                color: Colors.white,
-                              ),
-                              SizedBox(width: 5),
-                              Text(
-                                '下滑返回待删除列表',
-                                style: TextStyle(
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: _GlassSurface(
+                      radius: 18,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        '${index + 1} / ${ids.length}',
+                        key: const Key('queue-preview-counter'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _GlassSurface(
+                            radius: 20,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
                                   color: Colors.white,
-                                  fontWeight: FontWeight.w600,
+                                ),
+                                SizedBox(width: 5),
+                                Text(
+                                  '左右滑动浏览 · 下滑返回',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 52,
+                                  child: OutlinedButton.icon(
+                                    key: const Key('queue-preview-keep'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      backgroundColor: Colors.black54,
+                                      side: const BorderSide(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                    onPressed: busy
+                                        ? null
+                                        : () => _act(keep: true),
+                                    icon: const Icon(Icons.undo_rounded),
+                                    label: const Text('保留此项'),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 52,
+                                  child: FilledButton.icon(
+                                    key: const Key('queue-preview-delete'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: _systemRed,
+                                    ),
+                                    onPressed: busy
+                                        ? null
+                                        : () => _act(keep: false),
+                                    icon: const Icon(Icons.delete_outline),
+                                    label: const Text('删除此项'),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                height: 52,
-                                child: OutlinedButton.icon(
-                                  key: const Key('queue-preview-keep'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    backgroundColor: Colors.black54,
-                                    side: const BorderSide(
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                  onPressed: busy
-                                      ? null
-                                      : () => _act(widget.onKeep),
-                                  icon: const Icon(Icons.undo_rounded),
-                                  label: const Text('保留此项'),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: SizedBox(
-                                height: 52,
-                                child: FilledButton.icon(
-                                  key: const Key('queue-preview-delete'),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: _systemRed,
-                                  ),
-                                  onPressed: busy
-                                      ? null
-                                      : () => _act(widget.onDelete),
-                                  icon: const Icon(Icons.delete_outline),
-                                  label: const Text('删除此项'),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -7178,11 +7609,17 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    extendBodyBehindAppBar: true,
     appBar: const _FloatingGlassAppBar(title: Text('设置')),
     body: AnimatedBuilder(
       animation: app,
       builder: (context, _) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          _floatingHeaderInset(context) + 8,
+          16,
+          28,
+        ),
         children: [
           Card(
             margin: EdgeInsets.zero,

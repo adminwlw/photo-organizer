@@ -785,6 +785,21 @@ void main() {
         .single
         .value;
     expect(topStyle.statusBarIconBrightness, Brightness.light);
+    final topGradient =
+        tester
+                .widgetList<DecoratedBox>(
+                  find.descendant(
+                    of: find.byKey(const Key('page-top-gradient')),
+                    matching: find.byType(DecoratedBox),
+                  ),
+                )
+                .single
+                .decoration
+            as BoxDecoration;
+    expect((topGradient.gradient! as LinearGradient).colors, const [
+      Color(0x99000000),
+      Color(0x00000000),
+    ]);
 
     await tester.pump(const Duration(milliseconds: 2800));
     await tester.pump(const Duration(milliseconds: 400));
@@ -2017,6 +2032,25 @@ void main() {
 
     expect(find.byKey(const Key('media-gradient-app-bar')), findsOneWidget);
     expect(find.byKey(const Key('media-header-gradient')), findsOneWidget);
+    expect(find.byKey(const Key('media-browse-button')), findsOneWidget);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).extendBodyBehindAppBar,
+      isTrue,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('media-browse-button')),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('media-select-button')),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+    );
     expect(
       tester
           .widget<AppBar>(find.byKey(const Key('media-gradient-app-bar')))
@@ -2446,7 +2480,7 @@ void main() {
         .first;
     expect(
       (libraryGlass.decoration as BoxDecoration).color,
-      const Color(0xE6F9F9F9),
+      const Color(0xA6F9F9F9),
     );
     final libraryIcon = tester.widget<Icon>(
       find.descendant(
@@ -2794,11 +2828,11 @@ void main() {
       final viewer = tester.widget<InteractiveViewer>(
         find.byKey(const Key('queue-preview-zoom')),
       );
-      expect(viewer.maxScale, 4);
+      expect(viewer.maxScale, 5);
       expect(viewer.panEnabled, isFalse);
       expect(viewer.boundaryMargin, EdgeInsets.zero);
       expect(find.byKey(const Key('queue-preview-back')), findsOneWidget);
-      expect(find.text('下滑返回待删除列表'), findsOneWidget);
+      expect(find.text('左右滑动浏览 · 下滑返回'), findsOneWidget);
       expect(find.text('保留此项'), findsOneWidget);
       expect(find.text('删除此项'), findsOneWidget);
 
@@ -2810,6 +2844,126 @@ void main() {
       expect(find.byType(QueuePreviewScreen), findsNothing);
     },
   );
+
+  testWidgets('queue preview browses horizontally within the queue', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueuePreviewScreen(
+          FakeMediaRepository(),
+          photo,
+          itemIds: const ['photo', 'next-photo'],
+          onKeep: () async => false,
+          onDelete: () async => false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 / 2'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('queue-preview-surface')),
+      const Offset(-140, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('queue-preview-media-next-photo')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('queue preview double tap zooms smoothly and toggles back', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueuePreviewScreen(
+          FakeMediaRepository(),
+          photo,
+          onKeep: () async => false,
+          onDelete: () async => false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = find.byKey(const Key('queue-preview-surface'));
+    final point = tester.getCenter(surface);
+    await tester.tapAt(point);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(point);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    var viewer = tester.widget<InteractiveViewer>(
+      find.byKey(const Key('queue-preview-zoom')),
+    );
+    final middleScale = viewer.transformationController!.value
+        .getMaxScaleOnAxis();
+    expect(middleScale, greaterThan(1));
+    expect(middleScale, lessThan(2.5));
+    await tester.pumpAndSettle();
+    viewer = tester.widget<InteractiveViewer>(
+      find.byKey(const Key('queue-preview-zoom')),
+    );
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      moreOrLessEquals(2.5, epsilon: 0.01),
+    );
+    expect(find.byKey(const Key('queue-preview-back')), findsNothing);
+
+    await tester.tapAt(point);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(point);
+    await tester.pumpAndSettle();
+    viewer = tester.widget<InteractiveViewer>(
+      find.byKey(const Key('queue-preview-zoom')),
+    );
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      moreOrLessEquals(1, epsilon: 0.01),
+    );
+    expect(find.byKey(const Key('queue-preview-back')), findsOneWidget);
+  });
+
+  testWidgets('queue preview pinch zoom stays within the shared scale range', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueuePreviewScreen(
+          FakeMediaRepository(),
+          photo,
+          onKeep: () async => false,
+          onDelete: () async => false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = find.byKey(const Key('queue-preview-surface'));
+    final center = tester.getCenter(surface);
+    final first = await tester.startGesture(center - const Offset(20, 0));
+    final second = await tester.startGesture(center + const Offset(20, 0));
+    await tester.pump();
+    await first.moveTo(center - const Offset(70, 0));
+    await second.moveTo(center + const Offset(70, 0));
+    await tester.pump();
+
+    final viewer = tester.widget<InteractiveViewer>(
+      find.byKey(const Key('queue-preview-zoom')),
+    );
+    final scale = viewer.transformationController!.value.getMaxScaleOnAxis();
+    expect(scale, greaterThan(1));
+    expect(scale, lessThanOrEqualTo(5));
+
+    await first.up();
+    await second.up();
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('queue preview can keep the current item', (tester) async {
     final store = QueueAppStore(database, ['photo']);
