@@ -9,7 +9,8 @@ import 'store.dart';
 enum SystemAlbumGroup { album, people, smart }
 
 bool androidUsesSystemTrash(int sdkInt) => sdkInt >= 30;
-int deleteRequestBatchSize(bool isAndroid) => isAndroid ? 1 : 500;
+int deleteRequestBatchSize(bool isAndroid, bool usesRecoverableTrash) =>
+    isAndroid ? (usesRecoverableTrash ? 2000 : 1) : 500;
 
 class SystemAlbumSummary {
   const SystemAlbumSummary({
@@ -680,8 +681,9 @@ class MediaRepository {
         assets.add(asset);
       }
     }
-    // Keep Android system approval scoped to exactly one media item.
-    final batchSize = deleteRequestBatchSize(Platform.isAndroid);
+    // Android 11+ supports one system trash request for up to 2000 items.
+    // Android 10 only grants recoverable delete access one item at a time.
+    final batchSize = deleteRequestBatchSize(Platform.isAndroid, usesTrash);
     for (var start = 0; start < assets.length; start += batchSize) {
       final batch = assets.skip(start).take(batchSize).toList();
       for (final asset in batch) {

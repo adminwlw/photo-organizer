@@ -3,11 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 void main() {
-  test('Android 10 deletes directly and Android 11 uses system trash', () {
+  test('Android 11 groups trash requests while Android 10 stays per item', () {
     expect(androidUsesSystemTrash(29), isFalse);
     expect(androidUsesSystemTrash(30), isTrue);
-    expect(deleteRequestBatchSize(true), 1);
-    expect(deleteRequestBatchSize(false), 500);
+    expect(deleteRequestBatchSize(true, false), 1);
+    expect(deleteRequestBatchSize(true, true), 2000);
+    expect(deleteRequestBatchSize(false, true), 500);
   });
 
   test('photo hashes use Hamming distance and form representative groups', () {
