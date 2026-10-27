@@ -1088,34 +1088,43 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _brandHeader() => Row(
     key: const Key('home-brand'),
-    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
+      ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Image.asset(
+          'assets/app-logo.png',
+          key: const Key('home-brand-logo'),
+          width: 46,
+          height: 46,
+        ),
+      ),
+      const SizedBox(width: 11),
       const Expanded(
         child: Text(
           '相册删除',
-          key: Key('home-large-title'),
           style: TextStyle(
-            color: _primaryLabel,
-            fontSize: 34,
-            height: 1.08,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.8,
+            color: Color(0xFF111A35),
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
-      IconButton(
-        key: const Key('home-tutorial'),
-        tooltip: '使用教程',
-        onPressed: () => _open(
-          OnboardingScreen(
-            downAction: app.downAction,
-            onDone: () async => Navigator.pop(context),
+      Material(
+        color: const Color(0xD9FFFFFF),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          key: const Key('home-settings'),
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _open(SettingsScreen(app)),
+          child: const SizedBox(
+            width: 48,
+            height: 48,
+            child: Icon(
+              Icons.settings_outlined,
+              color: Color(0xFF1557F8),
+              size: 27,
+            ),
           ),
-        ),
-        icon: const Icon(Icons.question_mark_rounded, size: 21),
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0x14787880),
-          foregroundColor: _systemBlue,
         ),
       ),
     ],
@@ -1204,6 +1213,136 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () =>
             _open(ScopeScreen(app, Scope.all, initialPendingOnly: true)),
       ),
+    ),
+  );
+
+  Widget _heroPhoto(MediaRecord? item, {Key? key}) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white, width: 4),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x1A23469A),
+          blurRadius: 16,
+          offset: Offset(0, 7),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: item == null
+          ? const ColoredBox(
+              color: Color(0xFFDCEBFF),
+              child: Icon(
+                Icons.photo_library_outlined,
+                color: Color(0xFF78A7FF),
+              ),
+            )
+          : MediaThumb(app.media, item.id, key: key, width: 240, height: 180),
+    ),
+  );
+
+  Widget _heroIntro() => SizedBox(
+    height: 160,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final artWidth = (constraints.maxWidth * 0.46)
+            .clamp(132.0, 172.0)
+            .toDouble();
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              top: 26,
+              width: constraints.maxWidth - artWidth + 8,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '清理重复和无用照片\n让相册更清爽',
+                    style: TextStyle(
+                      color: Color(0xFF111A35),
+                      fontSize: 17,
+                      height: 1.22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  SizedBox(height: 9),
+                  Text(
+                    '从上次停下的位置继续整理',
+                    style: TextStyle(
+                      color: Color(0xFF6E7892),
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              width: artWidth,
+              height: 152,
+              child: FutureBuilder<List<MediaRecord>>(
+                future: allMediaCover,
+                builder: (context, snapshot) {
+                  final items = snapshot.data ?? const <MediaRecord>[];
+                  MediaRecord? itemAt(int index) =>
+                      index < items.length ? items[index] : null;
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        right: 8,
+                        top: 4,
+                        width: 112,
+                        height: 82,
+                        child: Transform.rotate(
+                          angle: 0.08,
+                          child: _heroPhoto(
+                            itemAt(0),
+                            key: const Key('home-hero-photo-0'),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 38,
+                        top: 60,
+                        width: 108,
+                        height: 80,
+                        child: Transform.rotate(
+                          angle: -0.08,
+                          child: _heroPhoto(
+                            itemAt(1),
+                            key: const Key('home-hero-photo-1'),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -1,
+                        top: 77,
+                        width: 103,
+                        height: 75,
+                        child: Transform.rotate(
+                          angle: 0.1,
+                          child: _heroPhoto(
+                            itemAt(2),
+                            key: const Key('home-hero-photo-2'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     ),
   );
 
@@ -1490,73 +1629,25 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _allMediaMosaic(List<MediaRecord> items) {
-    Widget tile(int index) => index < items.length
-        ? _allMediaCoverCell(items[index], index)
-        : const ColoredBox(
-            color: Color(0xFFEAF2FF),
-            child: Icon(
-              Icons.image_outlined,
-              color: Color(0xFFAAC3F8),
-              size: 24,
-            ),
-          );
-
-    Widget frame(int index, double angle) => Transform.rotate(
-      angle: angle,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x260F2D67),
-              blurRadius: 12,
-              offset: Offset(0, 5),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: tile(index),
-        ),
+    return GridView.builder(
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 4,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
       ),
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) => Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 2,
-            top: 15,
-            width: constraints.maxWidth * 0.56,
-            height: constraints.maxHeight * 0.72,
-            child: frame(0, -0.045),
-          ),
-          Positioned(
-            right: 2,
-            top: 1,
-            width: constraints.maxWidth * 0.46,
-            height: constraints.maxHeight * 0.48,
-            child: frame(1, 0.055),
-          ),
-          Positioned(
-            right: 0,
-            bottom: 1,
-            width: constraints.maxWidth * 0.47,
-            height: constraints.maxHeight * 0.45,
-            child: frame(2, -0.035),
-          ),
-          Positioned(
-            left: constraints.maxWidth * 0.36,
-            bottom: 4,
-            width: constraints.maxWidth * 0.29,
-            height: constraints.maxHeight * 0.42,
-            child: frame(3, 0.08),
-          ),
-        ],
-      ),
+      itemBuilder: (context, index) => index < items.length
+          ? _allMediaCoverCell(items[index], index)
+          : const ColoredBox(
+              color: Color(0xFFEAF2FF),
+              child: Icon(
+                Icons.image_outlined,
+                color: Color(0xFFAAC3F8),
+                size: 24,
+              ),
+            ),
     );
   }
 
@@ -1570,7 +1661,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(22),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
         child: Ink(
-          height: 188,
+          height: 168,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: const Color(0xEFFFFFFF),
@@ -1601,19 +1692,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 34,
-                          height: 34,
+                          width: 42,
+                          height: 42,
                           decoration: BoxDecoration(
                             color: const Color(0xFFF4F1FF),
-                            borderRadius: BorderRadius.circular(11),
+                            borderRadius: BorderRadius.circular(13),
                           ),
                           child: const Icon(
                             Icons.photo_library_outlined,
                             color: Color(0xFF4D51EE),
-                            size: 20,
+                            size: 23,
                           ),
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 6),
                         const Text(
                           '全部照片与视频',
                           maxLines: 2,
@@ -1636,43 +1727,33 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          count.hasData ? '${count.data} 项' : '读取中',
-                          style: const TextStyle(
-                            color: Color(0xFF245BF0),
-                            fontSize: 18,
-                            height: 1,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Container(
-                          height: 34,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF0FF),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFB8C9F4)),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '立即清理',
-                                style: TextStyle(
-                                  color: Color(0xFF1746B6),
-                                  fontSize: 12,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                count.hasData ? '${count.data}' : '读取中',
+                                style: const TextStyle(
+                                  color: Color(0xFF245BF0),
+                                  fontSize: 30,
+                                  height: 1,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              SizedBox(width: 3),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Color(0xFF1746B6),
-                                size: 17,
+                            ),
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFF2F5FD),
+                                shape: BoxShape.circle,
                               ),
-                            ],
-                          ),
+                              child: const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Color(0xFF245BF0),
+                                size: 21,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1770,11 +1851,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _homeHeader() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-    child: Column(
-      children: [_brandHeader(), const SizedBox(height: 22), _reviewHero()],
-    ),
+  Widget _homeHeader() => Stack(
+    children: [
+      Positioned.fill(
+        child: Image.asset(
+          'assets/home-header-background.png',
+          key: const Key('home-header-background'),
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          excludeFromSemantics: true,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: Column(
+          children: [
+            _brandHeader(),
+            const SizedBox(height: 12),
+            _heroIntro(),
+            const SizedBox(height: 4),
+            _reviewHero(),
+          ],
+        ),
+      ),
+    ],
   );
 
   Widget _home() => ListView(

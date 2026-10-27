@@ -1473,7 +1473,7 @@ void main() {
     expect(find.text('别忘了删除照片'), findsOneWidget);
   });
 
-  testWidgets('home follows the native large-title and grouped-list layout', (
+  testWidgets('home follows the supplied album-thumbnail reference layout', (
     tester,
   ) async {
     final app = CleanerState(
@@ -1484,18 +1484,22 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-brand')), findsOneWidget);
-    expect(find.byKey(const Key('home-large-title')), findsOneWidget);
-    expect(find.byKey(const Key('home-brand-logo')), findsNothing);
-    expect(find.byKey(const Key('home-settings')), findsNothing);
-    expect(find.byKey(const Key('home-tutorial')), findsOneWidget);
+    expect(find.byKey(const Key('home-large-title')), findsNothing);
+    expect(find.byKey(const Key('home-brand-logo')), findsOneWidget);
+    expect(find.byKey(const Key('home-settings')), findsOneWidget);
+    expect(find.byKey(const Key('home-tutorial')), findsNothing);
     expect(find.text('相册删除'), findsOneWidget);
-    expect(find.text('清理重复和无用照片\n让相册更清爽'), findsNothing);
+    expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
+    expect(find.text('从上次停下的位置继续整理'), findsOneWidget);
+    for (var index = 0; index < 3; index++) {
+      expect(find.byKey(Key('home-hero-photo-$index')), findsOneWidget);
+    }
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
     final allMediaSize = tester.getSize(
       find.byKey(const ValueKey('category-all')),
     );
     expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
-    expect(allMediaSize.height, inInclusiveRange(180, 200));
+    expect(allMediaSize.height, inInclusiveRange(160, 175));
     expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
     final reviewHeroInk = tester.widget<Ink>(
       find.descendant(
@@ -1590,7 +1594,7 @@ void main() {
     expect(find.byKey(const ValueKey('section-待删除')), findsNothing);
   });
 
-  testWidgets('all media cover uses the selected four-photo art composition', (
+  testWidgets('all media cover uses the reference two-by-two photo grid', (
     tester,
   ) async {
     final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
@@ -1619,11 +1623,19 @@ void main() {
     final bottomRight = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-3')),
     );
-    expect(topLeft.top, greaterThan(topRight.top));
-    expect(bottomLeft.top, greaterThan(topRight.bottom));
-    expect(bottomRight.left, greaterThan(topLeft.left));
-    expect(bottomRight.left, lessThan(bottomLeft.left));
-    expect(find.text('立即清理'), findsOneWidget);
+    expect(topLeft.top, moreOrLessEquals(topRight.top, epsilon: 0.1));
+    expect(bottomLeft.top, moreOrLessEquals(bottomRight.top, epsilon: 0.1));
+    expect(bottomLeft.top, greaterThan(topLeft.bottom));
+    expect(bottomLeft.left, moreOrLessEquals(topLeft.left, epsilon: 0.1));
+    expect(bottomRight.left, greaterThan(bottomLeft.right));
+    expect(find.text('立即清理'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('category-all')),
+        matching: find.byIcon(Icons.arrow_forward_rounded),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('storage summary is reused and largest media types lead', (
