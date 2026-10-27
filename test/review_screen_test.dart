@@ -875,12 +875,9 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     final noticeDecoration =
         tester.widget<DecoratedBox>(notice).decoration as BoxDecoration;
-    expect(noticeDecoration.color, const Color(0x70FFFFFF));
-    expect(noticeDecoration.border, isNotNull);
-    expect(
-      tester.widget<Text>(find.text('已经是第一张')).style?.color,
-      const Color(0xFF10131A),
-    );
+    expect(noticeDecoration.color, const Color(0xE6FFFFFF));
+    expect(noticeDecoration.border, isNull);
+    expect(tester.widget<Text>(find.text('已经是第一张')).style?.color, Colors.black);
     expect(
       tester.widget<Text>(find.text('已经是第一张')).style?.decoration,
       TextDecoration.none,
@@ -1476,7 +1473,7 @@ void main() {
     expect(find.text('别忘了删除照片'), findsOneWidget);
   });
 
-  testWidgets('home follows the selected hero and stacked category layout', (
+  testWidgets('home follows the native large-title and grouped-list layout', (
     tester,
   ) async {
     final app = CleanerState(
@@ -1487,18 +1484,19 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-brand')), findsOneWidget);
-    expect(find.byKey(const Key('home-brand-logo')), findsOneWidget);
+    expect(find.byKey(const Key('home-large-title')), findsOneWidget);
+    expect(find.byKey(const Key('home-brand-logo')), findsNothing);
     expect(find.byKey(const Key('home-settings')), findsNothing);
     expect(find.byKey(const Key('home-tutorial')), findsOneWidget);
     expect(find.text('相册删除'), findsOneWidget);
-    expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
+    expect(find.text('清理重复和无用照片\n让相册更清爽'), findsNothing);
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
     final allMediaSize = tester.getSize(
       find.byKey(const ValueKey('category-all')),
     );
     expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
     expect(allMediaSize.height, inInclusiveRange(180, 200));
-    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 84);
     expect(find.text('整理进度'), findsNothing);
     expect(find.text('待删除队列'), findsNothing);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
@@ -1563,19 +1561,19 @@ void main() {
     final similarRect = tester.getRect(
       find.byKey(const ValueKey('category-similar')),
     );
-    expect(videoRect.top, moreOrLessEquals(screenshotRect.top, epsilon: 0.1));
-    expect(
-      videoRect.width,
-      moreOrLessEquals(screenshotRect.width, epsilon: 0.1),
-    );
-    expect(selfieRect.top, greaterThan(videoRect.bottom));
+    expect(screenshotRect.top, greaterThan(videoRect.bottom));
+    expect(selfieRect.top, greaterThan(screenshotRect.bottom));
     expect(liveRect.top, greaterThan(selfieRect.bottom));
     expect(similarRect.top, greaterThan(liveRect.bottom));
-    expect(selfieRect.width, greaterThan(videoRect.width * 1.8));
+    expect(selfieRect.width, moreOrLessEquals(videoRect.width, epsilon: 0.1));
+    expect(
+      screenshotRect.width,
+      moreOrLessEquals(videoRect.width, epsilon: 0.1),
+    );
     expect(liveRect.width, moreOrLessEquals(selfieRect.width, epsilon: 0.1));
     expect(similarRect.width, moreOrLessEquals(selfieRect.width, epsilon: 0.1));
 
-    await tester.tap(find.text('相册'));
+    await tester.tap(find.byKey(const Key('albums-tab')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('album-all-media-hero')), findsOneWidget);
     expect(find.byKey(const Key('system-album-grid')), findsOneWidget);
@@ -1585,9 +1583,7 @@ void main() {
     expect(find.byKey(const ValueKey('section-待删除')), findsNothing);
   });
 
-  testWidgets('all media cover uses the selected four-photo art composition', (
-    tester,
-  ) async {
+  testWidgets('all media cover uses a calm four-photo grid', (tester) async {
     final app = CleanerState(SixMediaAppStore(database), FakeMediaRepository());
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
@@ -1614,10 +1610,11 @@ void main() {
     final bottomRight = tester.getRect(
       find.byKey(const ValueKey('all-media-cover-cell-3')),
     );
-    expect(topLeft.top, greaterThan(topRight.top));
+    expect(topLeft.top, moreOrLessEquals(topRight.top, epsilon: 0.1));
+    expect(topRight.left, greaterThan(topLeft.right));
     expect(bottomLeft.top, greaterThan(topRight.bottom));
-    expect(bottomRight.left, greaterThan(topLeft.left));
-    expect(bottomRight.left, lessThan(bottomLeft.left));
+    expect(bottomRight.top, moreOrLessEquals(bottomLeft.top, epsilon: 0.1));
+    expect(bottomRight.left, greaterThan(bottomLeft.right));
   });
 
   testWidgets('storage summary is reused and largest media types lead', (
@@ -1629,7 +1626,7 @@ void main() {
     Future<void> openMy() async {
       await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('我的'));
+      await tester.tap(find.byKey(const Key('profile-tab')));
       await tester.pumpAndSettle();
     }
 
@@ -1658,14 +1655,14 @@ void main() {
       );
       await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('我的'));
+      await tester.tap(find.byKey(const Key('profile-tab')));
       await tester.pumpAndSettle();
       expect(find.text('待定队列'), findsNothing);
 
       app.downAction = DownSwipeAction.pending;
       await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('我的'));
+      await tester.tap(find.byKey(const Key('profile-tab')));
       await tester.pumpAndSettle();
       expect(find.text('待定队列'), findsOneWidget);
     },
@@ -1709,7 +1706,7 @@ void main() {
     expect(find.byKey(const ValueKey('category-category:live')), findsNothing);
     final similar = find.byKey(const ValueKey('category-similar'));
     expect(
-      find.descendant(of: similar, matching: find.text('2 项')),
+      find.descendant(of: similar, matching: find.text('2')),
       findsOneWidget,
     );
     expect(find.text('分析'), findsNothing);
@@ -1757,7 +1754,7 @@ void main() {
       );
       await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('相册'));
+      await tester.tap(find.byKey(const Key('albums-tab')));
       await tester.pumpAndSettle();
       final grid = tester.widget<GridView>(
         find.byKey(const Key('system-album-grid')),
@@ -1784,7 +1781,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('相册'));
+    await tester.tap(find.byKey(const Key('albums-tab')));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -1805,7 +1802,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('media-gradient-app-bar')), findsOneWidget);
-    expect(find.byKey(const Key('media-header-gradient')), findsOneWidget);
+    expect(find.byKey(const Key('media-header-gradient')), findsNothing);
+    expect(
+      tester
+          .widget<AppBar>(find.byKey(const Key('media-gradient-app-bar')))
+          .backgroundColor,
+      const Color(0xFFF2F2F7),
+    );
     expect(find.text('2 个项目'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('media-select-button')));
@@ -2126,7 +2129,7 @@ void main() {
     },
   );
 
-  testWidgets('home navigation floats on glass and animates tab changes', (
+  testWidgets('home navigation uses a translucent native tab bar', (
     tester,
   ) async {
     final app = CleanerState(ScopeAppStore(database), AlbumsMediaRepository());
@@ -2145,7 +2148,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('相册'));
+    await tester.tap(find.byKey(const Key('albums-tab')));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.byType(FadeTransition), findsWidgets);
     await tester.pumpAndSettle();
@@ -2182,7 +2185,7 @@ void main() {
         .first;
     expect(
       (libraryGlass.decoration as BoxDecoration).color,
-      const Color(0x70FFFFFF),
+      const Color(0xE6F9F9F9),
     );
     final libraryIcon = tester.widget<Icon>(
       find.descendant(
@@ -2190,7 +2193,7 @@ void main() {
         matching: find.byIcon(Icons.photo_library_outlined),
       ),
     );
-    expect(libraryIcon.color, const Color(0xFF1557F8));
+    expect(libraryIcon.color, const Color(0xFF007AFF));
     final selectedMode = tester
         .widgetList<Material>(
           find.descendant(
@@ -2199,7 +2202,7 @@ void main() {
           ),
         )
         .first;
-    expect(selectedMode.color, const Color(0x8FE2E9FF));
+    expect(selectedMode.color, Colors.white);
 
     await tester.tap(find.byKey(const ValueKey('library-mode-month')));
     await tester.pumpAndSettle();
@@ -2318,7 +2321,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('继续整理'), findsOneWidget);
     expect(find.text('回到上次位置'), findsNothing);
-    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 84);
 
     await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
     await tester.pumpAndSettle();

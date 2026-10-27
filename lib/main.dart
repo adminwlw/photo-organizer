@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -10,9 +11,14 @@ import 'package:video_player/video_player.dart';
 import 'media_repository.dart';
 import 'store.dart';
 
-const _buttonTextShadows = [
-  Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
-];
+const _systemBlue = Color(0xFF007AFF);
+const _systemRed = Color(0xFFFF3B30);
+const _systemBackground = Color(0xFFF2F2F7);
+const _secondarySystemBackground = Color(0xFFFFFFFF);
+const _primaryLabel = Color(0xFF000000);
+const _secondaryLabel = Color(0x993C3C43);
+const _tertiaryLabel = Color(0x4D3C3C43);
+const _separator = Color(0x1F3C3C43);
 
 enum DownSwipeAction { none, pending, returnToAlbum }
 
@@ -87,91 +93,59 @@ class _FloatingGlassAppBar extends StatelessWidget
   final List<Widget>? actions;
 
   @override
-  Size get preferredSize => const Size.fromHeight(68);
+  Size get preferredSize => const Size.fromHeight(52);
 
   @override
   Widget build(BuildContext context) => AppBar(
     primary: true,
-    toolbarHeight: 68,
-    backgroundColor: Colors.transparent,
+    toolbarHeight: 52,
+    backgroundColor: _systemBackground,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
     title: title,
     actions: actions,
-    flexibleSpace: SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0x70FFFFFF),
-                border: Border.all(color: const Color(0x99FFFFFF)),
-                borderRadius: BorderRadius.circular(24),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
   );
 }
 
 class _MediaGradientAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   const _MediaGradientAppBar({
-    required this.media,
     required this.title,
     required this.subtitle,
-    this.coverId,
     this.actions,
   });
 
-  final MediaRepository media;
   final String title;
   final String subtitle;
-  final String? coverId;
   final List<Widget>? actions;
 
   @override
-  Size get preferredSize => const Size.fromHeight(88);
+  Size get preferredSize => const Size.fromHeight(60);
 
   @override
   Widget build(BuildContext context) => AppBar(
     key: const Key('media-gradient-app-bar'),
     primary: true,
-    toolbarHeight: 88,
+    toolbarHeight: 60,
     automaticallyImplyLeading: false,
-    backgroundColor: const Color(0xFF2B3037),
+    backgroundColor: _systemBackground,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
-    systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+    systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
-    leadingWidth: 68,
-    leading: Padding(
-      padding: const EdgeInsets.only(left: 12),
-      child: Center(
-        child: Material(
-          color: const Color(0x52000000),
-          shape: const CircleBorder(side: BorderSide(color: Color(0x66FFFFFF))),
-          child: IconButton(
-            key: const Key('media-header-back'),
-            tooltip: '返回',
-            onPressed: () => Navigator.maybePop(context),
-            color: Colors.white,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          ),
-        ),
-      ),
+    leadingWidth: 52,
+    leading: IconButton(
+      key: const Key('media-header-back'),
+      tooltip: '返回',
+      onPressed: () => Navigator.maybePop(context),
+      color: _systemBlue,
+      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
     ),
-    titleSpacing: 6,
+    titleSpacing: 0,
     title: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,11 +155,10 @@ class _MediaGradientAppBar extends StatelessWidget
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            height: 1.08,
-            shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+            color: _primaryLabel,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            height: 1.12,
           ),
         ),
         const SizedBox(height: 4),
@@ -194,40 +167,14 @@ class _MediaGradientAppBar extends StatelessWidget
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+            color: _secondaryLabel,
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
           ),
         ),
       ],
     ),
     actions: actions,
-    flexibleSpace: Stack(
-      fit: StackFit.expand,
-      children: [
-        if (coverId != null)
-          MediaThumb(
-            media,
-            coverId!,
-            width: 1080,
-            height: 360,
-            showPlaceholderIcon: false,
-            placeholderColor: const Color(0xFF2B3037),
-          ),
-        const DecoratedBox(
-          key: Key('media-header-gradient'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xE6000000), Color(0xAD11151A), Color(0xF22B3037)],
-              stops: [0, 0.56, 1],
-            ),
-          ),
-        ),
-      ],
-    ),
   );
 }
 
@@ -245,12 +192,10 @@ class _HeaderSelectButton extends StatelessWidget {
         key: const Key('media-select-button'),
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          foregroundColor: Colors.white,
-          disabledForegroundColor: Colors.white54,
-          backgroundColor: const Color(0x52000000),
-          side: const BorderSide(color: Color(0x66FFFFFF)),
+          foregroundColor: _systemBlue,
+          disabledForegroundColor: _tertiaryLabel,
+          backgroundColor: Colors.transparent,
           minimumSize: const Size(62, 44),
-          shape: const StadiumBorder(),
         ),
         child: Text(selecting ? '取消' : '选择'),
       ),
@@ -306,7 +251,7 @@ class _SelectionMarker extends StatelessWidget {
     width: 28,
     height: 28,
     decoration: BoxDecoration(
-      color: selected ? const Color(0xFF1557F8) : const Color(0x66000000),
+      color: selected ? _systemBlue : const Color(0x66000000),
       shape: BoxShape.circle,
       border: Border.all(color: Colors.white, width: 2),
     ),
@@ -329,21 +274,19 @@ class _BatchQueueBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SafeArea(
-    minimum: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+    minimum: EdgeInsets.zero,
     child: Align(
       alignment: Alignment.bottomCenter,
-      child: ClipRRect(
+      child: ClipRect(
         key: const Key('batch-queue-bar'),
-        borderRadius: BorderRadius.circular(28),
         child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
-            height: 58,
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: const Color(0x66000000),
-              border: Border.all(color: const Color(0x66FFFFFF)),
-              borderRadius: BorderRadius.circular(28),
+            height: 66,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            decoration: const BoxDecoration(
+              color: Color(0xE6F9F9F9),
+              border: Border(top: BorderSide(color: _separator, width: 0.5)),
             ),
             child: SizedBox(
               width: double.infinity,
@@ -351,8 +294,8 @@ class _BatchQueueBar extends StatelessWidget {
                 key: const Key('batch-queue-button'),
                 onPressed: busy || selectedCount == 0 ? null : onQueue,
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1557F8),
-                  disabledBackgroundColor: const Color(0x668A8F99),
+                  backgroundColor: _systemBlue,
+                  disabledBackgroundColor: const Color(0x33787880),
                 ),
                 icon: const Icon(Icons.delete_sweep_outlined),
                 label: Text(busy ? '正在加入…' : '加入待删除 $selectedCount 项'),
@@ -509,77 +452,146 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
     title: '相册删除',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF1557F8),
-        primary: const Color(0xFF1557F8),
-        surface: Colors.white,
+      colorScheme: const ColorScheme.light(
+        primary: _systemBlue,
+        onPrimary: Colors.white,
+        secondary: _systemBlue,
+        onSecondary: Colors.white,
+        surface: _secondarySystemBackground,
+        onSurface: _primaryLabel,
+        error: _systemRed,
+        onError: Colors.white,
       ),
-      scaffoldBackgroundColor: const Color(0xFFF7F8FA),
+      scaffoldBackgroundColor: _systemBackground,
       appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF7F8FA),
-        foregroundColor: Color(0xFF10131A),
+        backgroundColor: _systemBackground,
+        foregroundColor: _primaryLabel,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        toolbarHeight: 52,
         titleTextStyle: TextStyle(
-          fontSize: 23,
-          fontWeight: FontWeight.w800,
-          color: Color(0xFF10131A),
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          color: _primaryLabel,
         ),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: _secondarySystemBackground,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
-          textStyle: const TextStyle(shadows: _buttonTextShadows),
+          backgroundColor: _systemBlue,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(44, 50),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF1746B6),
-          backgroundColor: const Color(0xFFEAF0FF),
+          foregroundColor: _systemBlue,
+          backgroundColor: Colors.transparent,
           minimumSize: const Size(44, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          textStyle: const TextStyle(shadows: _buttonTextShadows),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFB8C9F4)),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w400),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF1746B6),
-          backgroundColor: Colors.white,
-          minimumSize: const Size(48, 48),
-          side: const BorderSide(color: Color(0xFF7E9FE8), width: 1.2),
-          textStyle: const TextStyle(shadows: _buttonTextShadows),
+          foregroundColor: _systemBlue,
+          backgroundColor: _secondarySystemBackground,
+          minimumSize: const Size(44, 50),
+          side: const BorderSide(color: _separator),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          foregroundColor: const Color(0xFF1746B6),
-          backgroundColor: Colors.white,
-          minimumSize: const Size(48, 48),
-          textStyle: const TextStyle(shadows: _buttonTextShadows),
+          foregroundColor: _systemBlue,
+          backgroundColor: _secondarySystemBackground,
+          elevation: 0,
+          minimumSize: const Size(44, 50),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          foregroundColor: const Color(0xFF1746B6),
+          foregroundColor: _systemBlue,
           minimumSize: const Size(44, 44),
         ),
       ),
-      navigationBarTheme: const NavigationBarThemeData(
-        labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(shadows: _buttonTextShadows),
+      dividerTheme: const DividerThemeData(
+        color: _separator,
+        thickness: 0.5,
+        space: 0.5,
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: _systemBlue,
+        textColor: _primaryLabel,
+        minTileHeight: 56,
+        contentPadding: EdgeInsets.symmetric(horizontal: 16),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xF2FFFFFF),
+        surfaceTintColor: Colors.transparent,
+        elevation: 18,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: _secondarySystemBackground,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Color(0xE61C1C1E),
+        contentTextStyle: TextStyle(color: Colors.white),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        shape: const CircleBorder(),
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? _systemBlue
+              : Colors.transparent,
         ),
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        height: 52,
+        backgroundColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
+        iconTheme: WidgetStateProperty.fromMap({
+          WidgetState.selected: IconThemeData(color: _systemBlue, size: 25),
+          WidgetState.any: IconThemeData(color: _secondaryLabel, size: 24),
+        }),
+        labelTextStyle: WidgetStateProperty.fromMap({
+          WidgetState.selected: TextStyle(
+            color: _systemBlue,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+          WidgetState.any: TextStyle(
+            color: _secondaryLabel,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        }),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
       ),
       useMaterial3: true,
     ),
@@ -619,11 +631,18 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const pages = [
-    'assets/tutorial/tutorial-01.png',
-    'assets/tutorial/tutorial-02.png',
-    'assets/tutorial/tutorial-03.png',
-    'assets/tutorial/tutorial-04.png',
+  static const pageTitles = ['浏览照片', '加入待删除', '设置下滑动作', '删除前复核'];
+  static const pageDescriptions = [
+    '左右轻扫切换照片，连续浏览时不需要反复返回列表。',
+    '向上轻扫只会加入待删除队列，不会立即删除照片。',
+    '你可以把下滑设为无、待定或返回相册，之后也能在设置中修改。',
+    '在待删除队列中再次检查，确认后才会交给系统处理。',
+  ];
+  static const pageIcons = [
+    Icons.photo_library_outlined,
+    Icons.delete_outline_rounded,
+    Icons.swipe_down_alt_rounded,
+    Icons.check_rounded,
   ];
   final PageController pager = PageController();
   Timer? playbackTimer;
@@ -638,7 +657,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _schedulePlayback() {
     playbackTimer?.cancel();
-    if (page == pages.length - 1) return;
+    if (page == pageTitles.length - 1) return;
     playbackTimer = Timer(const Duration(milliseconds: 2800), () {
       if (!mounted || !pager.hasClients || busy) return;
       pager.nextPage(
@@ -655,6 +674,119 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _ => '左右预览，上滑删除，下滑动作可以自定义',
   };
 
+  Widget _tutorialPage(int index) => Semantics(
+    label: _pageLabel(index),
+    container: true,
+    excludeSemantics: true,
+    child: Padding(
+      key: ValueKey('onboarding-page-${index + 1}'),
+      padding: const EdgeInsets.fromLTRB(28, 28, 28, 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 190,
+            height: 230,
+            decoration: BoxDecoration(
+              color: _secondarySystemBackground,
+              borderRadius: BorderRadius.circular(34),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 26,
+                  offset: Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 116,
+                  height: 142,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5F2FF),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Icon(pageIcons[index], color: _systemBlue, size: 52),
+                ),
+                if (index == 0) ...[
+                  const Positioned(
+                    left: 17,
+                    child: Icon(
+                      Icons.chevron_left_rounded,
+                      color: _secondaryLabel,
+                      size: 28,
+                    ),
+                  ),
+                  const Positioned(
+                    right: 17,
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: _secondaryLabel,
+                      size: 28,
+                    ),
+                  ),
+                ],
+                if (index == 1)
+                  const Positioned(
+                    top: 20,
+                    child: Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: _systemRed,
+                      size: 34,
+                    ),
+                  ),
+                if (index == 2)
+                  const Positioned(
+                    bottom: 17,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: _systemBlue,
+                      size: 34,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 38),
+          Text(
+            pageTitles[index],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _primaryLabel,
+              fontSize: 30,
+              height: 1.1,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.7,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            pageDescriptions[index],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _secondaryLabel,
+              fontSize: 17,
+              height: 1.42,
+            ),
+          ),
+          if (index == 2) ...[
+            const SizedBox(height: 14),
+            Text(
+              '当前：${widget.downAction.label}',
+              style: const TextStyle(
+                color: _systemBlue,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+
   @override
   void dispose() {
     playbackTimer?.cancel();
@@ -664,12 +796,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF5F8FD),
+    backgroundColor: _systemBackground,
     appBar: Navigator.canPop(context)
-        ? AppBar(
-            title: const Text('使用教程'),
-            backgroundColor: const Color(0xFFF5F8FD),
-          )
+        ? AppBar(title: const Text('使用教程'))
         : null,
     body: SafeArea(
       child: Column(
@@ -678,21 +807,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: PageView.builder(
               key: const Key('onboarding-pager'),
               controller: pager,
-              itemCount: pages.length,
+              itemCount: pageTitles.length,
               onPageChanged: (value) {
                 setState(() => page = value);
                 _schedulePlayback();
               },
-              itemBuilder: (context, index) => Semantics(
-                label: _pageLabel(index),
-                image: true,
-                child: Image.asset(
-                  pages[index],
-                  key: ValueKey('onboarding-page-${index + 1}'),
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
-                ),
-              ),
+              itemBuilder: (context, index) => _tutorialPage(index),
             ),
           ),
           Padding(
@@ -701,16 +821,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               children: [
                 Row(
                   children: List.generate(
-                    pages.length,
+                    pageTitles.length,
                     (index) => AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
-                      width: index == page ? 28 : 8,
+                      width: 8,
                       height: 8,
                       margin: const EdgeInsets.only(right: 7),
                       decoration: BoxDecoration(
                         color: index == page
-                            ? const Color(0xFF175CF5)
-                            : const Color(0xFFC8D2DF),
+                            ? _systemBlue
+                            : const Color(0x33787880),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -718,7 +838,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${page + 1} / ${pages.length}',
+                  '${page + 1} / ${pageTitles.length}',
                   key: const Key('onboarding-page-indicator'),
                   style: const TextStyle(
                     color: Color(0xFF667085),
@@ -741,7 +861,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   onPressed: busy
                       ? null
                       : () async {
-                          if (page < pages.length - 1) {
+                          if (page < pageTitles.length - 1) {
                             pager.nextPage(
                               duration: const Duration(milliseconds: 300),
                               curve: Curves.easeOutCubic,
@@ -756,7 +876,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             }
                           }
                         },
-                  child: Text(page == pages.length - 1 ? '开始清理' : '下一页'),
+                  child: Text(page == pageTitles.length - 1 ? '开始清理' : '继续'),
                 ),
               ],
             ),
@@ -780,16 +900,46 @@ class PermissionScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.lock_outline, size: 72),
-            const SizedBox(height: 20),
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5F2FF),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Icon(
+                Icons.photo_library_outlined,
+                color: _systemBlue,
+                size: 42,
+              ),
+            ),
+            const SizedBox(height: 28),
+            const Text(
+              '允许访问照片',
+              style: TextStyle(
+                color: _primaryLabel,
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 10),
             const Text(
               '需要照片访问权限才能整理相册。你也可以只选择部分照片。',
               textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _secondaryLabel,
+                fontSize: 17,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: app.requestPermission,
-              child: const Text('请求照片权限'),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: app.requestPermission,
+                child: const Text('继续'),
+              ),
             ),
             TextButton(
               onPressed: app.managePermission,
@@ -911,16 +1061,17 @@ class _HomeScreenState extends State<HomeScreen> {
     double topPadding = 22,
   }) => Padding(
     key: ValueKey('section-$title'),
-    padding: EdgeInsets.fromLTRB(2, topPadding, 2, 12),
+    padding: EdgeInsets.fromLTRB(0, topPadding, 0, 10),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111A35),
-            fontSize: 21,
-            fontWeight: FontWeight.w800,
+            color: _primaryLabel,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
           ),
         ),
         if (subtitle != null)
@@ -928,7 +1079,7 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               subtitle,
-              style: const TextStyle(color: Color(0xFF7F8490)),
+              style: const TextStyle(color: _secondaryLabel),
             ),
           ),
       ],
@@ -937,36 +1088,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _brandHeader() => Row(
     key: const Key('home-brand'),
+    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(13),
-        child: Image.asset(
-          'assets/app-logo.png',
-          key: const Key('home-brand-logo'),
-          width: 46,
-          height: 46,
-        ),
-      ),
-      const SizedBox(width: 11),
       const Expanded(
         child: Text(
           '相册删除',
+          key: Key('home-large-title'),
           style: TextStyle(
-            color: Color(0xFF111A35),
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
+            color: _primaryLabel,
+            fontSize: 34,
+            height: 1.08,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.8,
           ),
         ),
       ),
-      TextButton(
+      IconButton(
         key: const Key('home-tutorial'),
+        tooltip: '使用教程',
         onPressed: () => _open(
           OnboardingScreen(
             downAction: app.downAction,
             onDone: () async => Navigator.pop(context),
           ),
         ),
-        child: const Text('使用教程'),
+        icon: const Icon(Icons.question_mark_rounded, size: 21),
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0x14787880),
+          foregroundColor: _systemBlue,
+        ),
       ),
     ],
   );
@@ -976,168 +1126,32 @@ class _HomeScreenState extends State<HomeScreen> {
     IconData icon, {
     int? knownCount,
     String? title,
-    bool cornerLabels = false,
   }) => FutureBuilder<int>(
     future: knownCount == null
         ? app.store.count(scope)
         : Future.value(knownCount),
-    builder: (context, count) => InkWell(
-      borderRadius: BorderRadius.circular(22),
+    builder: (context, count) => _compactCategoryTile(
+      key: ValueKey('scope-${scope.key}'),
+      icon: icon,
+      label: title ?? scope.label,
+      count: count.data,
       onTap: () => _open(ScopeScreen(app, scope)),
-      child: Container(
-        height: 145,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: const Color(0xFFECEEF2)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if ((count.data ?? 0) > 0)
-              FutureBuilder<MediaRecord?>(
-                future: app.store.at(scope, 0),
-                builder: (context, first) => first.data == null
-                    ? const SizedBox.shrink()
-                    : MediaThumb(app.media, first.data!.id),
-              ),
-            if (!cornerLabels || (count.data ?? 0) == 0)
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: (count.data ?? 0) > 0
-                        ? [Colors.black12, Colors.black.withValues(alpha: 0.65)]
-                        : [const Color(0xFFF6F8FF), const Color(0xFFEEF2FF)],
-                  ),
-                ),
-              ),
-            if (cornerLabels) ...[
-              Positioned(
-                left: 9,
-                top: 9,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      icon,
-                      color: (count.data ?? 0) > 0
-                          ? Colors.white
-                          : const Color(0xFF1557F8),
-                      shadows: (count.data ?? 0) > 0
-                          ? const [
-                              Shadow(
-                                color: Color(0xE6000000),
-                                blurRadius: 10,
-                                offset: Offset(0, 2),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      title ?? scope.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: (count.data ?? 0) > 0
-                            ? Colors.white
-                            : const Color(0xFF10131A),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        shadows: (count.data ?? 0) > 0
-                            ? const [
-                                Shadow(
-                                  color: Color(0xE6000000),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 2),
-                                ),
-                              ]
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                right: 9,
-                bottom: 9,
-                child: Text(
-                  count.hasData ? '${count.data} 项' : '读取中',
-                  style: TextStyle(
-                    color: (count.data ?? 0) > 0
-                        ? Colors.white
-                        : const Color(0xFF818895),
-                    fontWeight: FontWeight.w700,
-                    shadows: (count.data ?? 0) > 0
-                        ? const [
-                            Shadow(
-                              color: Color(0xE6000000),
-                              blurRadius: 10,
-                              offset: Offset(0, 2),
-                            ),
-                          ]
-                        : null,
-                  ),
-                ),
-              ),
-            ] else
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Icon(
-                      icon,
-                      color: (count.data ?? 0) > 0
-                          ? Colors.white
-                          : const Color(0xFF1557F8),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title ?? scope.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: (count.data ?? 0) > 0
-                                ? Colors.white
-                                : const Color(0xFF10131A),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          count.hasData ? '${count.data} 项' : '读取中',
-                          style: TextStyle(
-                            color: (count.data ?? 0) > 0
-                                ? Colors.white70
-                                : const Color(0xFF818895),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
     ),
   );
 
-  Widget _tileGrid(List<Widget> children) => GridView.count(
-    crossAxisCount: 2,
-    crossAxisSpacing: 12,
-    mainAxisSpacing: 12,
-    childAspectRatio: 1.25,
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    children: children,
+  Widget _tileGrid(List<Widget> children) => ClipRRect(
+    borderRadius: BorderRadius.circular(14),
+    child: ColoredBox(
+      color: _secondarySystemBackground,
+      child: Column(
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            if (index > 0) const Divider(indent: 56),
+            children[index],
+          ],
+        ],
+      ),
+    ),
   );
 
   Widget _queueCard() => FutureBuilder<List<Map<String, Object?>>>(
@@ -1151,7 +1165,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         leading: const CircleAvatar(
           backgroundColor: Color(0xFFEAF0FF),
-          child: Icon(Icons.delete_outline, color: Color(0xFF1557F8)),
+          child: Icon(Icons.delete_outline, color: _systemBlue),
         ),
         title: const Text(
           '待删除队列',
@@ -1193,136 +1207,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _heroPhoto(MediaRecord? item, {Key? key}) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white, width: 4),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x1A23469A),
-          blurRadius: 16,
-          offset: Offset(0, 7),
-        ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: item == null
-          ? const ColoredBox(
-              color: Color(0xFFDCEBFF),
-              child: Icon(
-                Icons.photo_library_outlined,
-                color: Color(0xFF78A7FF),
-              ),
-            )
-          : MediaThumb(app.media, item.id, key: key, width: 240, height: 180),
-    ),
-  );
-
-  Widget _heroIntro() => SizedBox(
-    height: 160,
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final artWidth = (constraints.maxWidth * 0.46)
-            .clamp(132.0, 172.0)
-            .toDouble();
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: 0,
-              top: 26,
-              width: constraints.maxWidth - artWidth + 8,
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '清理重复和无用照片\n让相册更清爽',
-                    style: TextStyle(
-                      color: Color(0xFF111A35),
-                      fontSize: 17,
-                      height: 1.22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  SizedBox(height: 9),
-                  Text(
-                    '从上次停下的位置继续整理',
-                    style: TextStyle(
-                      color: Color(0xFF6E7892),
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              width: artWidth,
-              height: 152,
-              child: FutureBuilder<List<MediaRecord>>(
-                future: allMediaCover,
-                builder: (context, snapshot) {
-                  final items = snapshot.data ?? const <MediaRecord>[];
-                  MediaRecord? itemAt(int index) =>
-                      index < items.length ? items[index] : null;
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned(
-                        right: 8,
-                        top: -6,
-                        width: 112,
-                        height: 82,
-                        child: Transform.rotate(
-                          angle: 0.08,
-                          child: _heroPhoto(
-                            itemAt(0),
-                            key: const Key('home-hero-photo-0'),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 38,
-                        top: 50,
-                        width: 108,
-                        height: 80,
-                        child: Transform.rotate(
-                          angle: -0.08,
-                          child: _heroPhoto(
-                            itemAt(1),
-                            key: const Key('home-hero-photo-1'),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: -1,
-                        top: 66,
-                        width: 103,
-                        height: 75,
-                        child: Transform.rotate(
-                          angle: 0.1,
-                          child: _heroPhoto(
-                            itemAt(2),
-                            key: const Key('home-hero-photo-2'),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-
   Widget _reviewHero() => FutureBuilder<ReviewProgress?>(
     future: app.store.reviewProgress(Scope.all),
     builder: (context, progressSnapshot) => FutureBuilder<int>(
@@ -1342,29 +1226,16 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Colors.transparent,
           child: InkWell(
             key: const Key('review-hero'),
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(14),
             onTap: enabled
                 ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
                 : null,
             child: Ink(
-              height: 76,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              height: 84,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF36A7F4),
-                    Color(0xFF3E77F7),
-                    Color(0xFF7565F2),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x294663EF),
-                    blurRadius: 18,
-                    offset: Offset(0, 8),
-                  ),
-                ],
+                color: _secondarySystemBackground,
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
                 children: [
@@ -1380,8 +1251,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: CircularProgressIndicator(
                             value: ratio,
                             strokeWidth: 4,
-                            backgroundColor: const Color(0x55FFFFFF),
-                            color: Colors.white,
+                            backgroundColor: const Color(0x1A787880),
+                            color: _systemBlue,
                           ),
                         ),
                         Container(
@@ -1389,15 +1260,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 42,
                           alignment: Alignment.center,
                           decoration: const BoxDecoration(
-                            color: Colors.white,
+                            color: Color(0xFFE5F2FF),
                             shape: BoxShape.circle,
                           ),
                           child: Text(
                             '$percent%',
                             style: const TextStyle(
-                              color: Color(0xFF1557F8),
+                              color: _systemBlue,
                               fontSize: 14,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -1413,9 +1284,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           hasProgress ? '继续整理' : '开始整理',
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: _primaryLabel,
                             fontSize: 17,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -1428,7 +1299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xE6FFFFFF),
+                            color: _secondaryLabel,
                             fontSize: 13,
                             height: 1.3,
                           ),
@@ -1441,12 +1312,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: enabled ? Colors.white : const Color(0x99FFFFFF),
+                      color: const Color(0x14787880),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.arrow_forward_rounded,
-                      color: Color(0xFF3158E6),
+                      color: _systemBlue,
                       size: 24,
                     ),
                   ),
@@ -1520,73 +1391,48 @@ class _HomeScreenState extends State<HomeScreen> {
     required int? count,
     required VoidCallback onTap,
     String? countText,
-    Color accent = const Color(0xFF1557F8),
-    Color surface = const Color(0xFFF3F6FF),
+    Color accent = _systemBlue,
   }) => SizedBox(
-    height: 72,
+    height: 58,
     child: InkWell(
       key: key,
-      borderRadius: BorderRadius.circular(20),
       onTap: onTap,
       child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: accent.withValues(alpha: 0.16)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        color: _secondarySystemBackground,
         child: Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(14),
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(7),
               ),
-              child: Icon(icon, color: accent, size: 21),
+              child: Icon(icon, color: accent, size: 18),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF111A35),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    countText ?? (count == null ? '读取中' : '$count 项'),
-                    style: const TextStyle(
-                      color: Color(0xFF6E7892),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: _primaryLabel,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
+            ),
+            Text(
+              countText ?? (count == null ? '读取中' : '$count'),
+              style: const TextStyle(color: _secondaryLabel, fontSize: 15),
             ),
             const SizedBox(width: 6),
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.66),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.arrow_forward_rounded,
-                color: const Color(0xFF193B8F),
-                size: 20,
-              ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: _tertiaryLabel,
+              size: 20,
             ),
           ],
         ),
@@ -1642,59 +1488,40 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
 
-    Widget frame(int index, double angle) => Transform.rotate(
-      angle: angle,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x260F2D67),
-              blurRadius: 12,
-              offset: Offset(0, 5),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: tile(index),
-        ),
-      ),
-    );
+    Widget frame(int index) =>
+        ClipRRect(borderRadius: BorderRadius.circular(3), child: tile(index));
 
     return LayoutBuilder(
       builder: (context, constraints) => Stack(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         children: [
           Positioned(
-            left: 2,
-            top: 15,
-            width: constraints.maxWidth * 0.56,
-            height: constraints.maxHeight * 0.72,
-            child: frame(0, -0.045),
-          ),
-          Positioned(
-            right: 2,
-            top: 1,
-            width: constraints.maxWidth * 0.46,
-            height: constraints.maxHeight * 0.48,
-            child: frame(1, 0.055),
+            left: 0,
+            top: 0,
+            width: constraints.maxWidth * 0.5 - 1,
+            height: constraints.maxHeight * 0.5 - 1,
+            child: frame(0),
           ),
           Positioned(
             right: 0,
-            bottom: 1,
-            width: constraints.maxWidth * 0.47,
-            height: constraints.maxHeight * 0.45,
-            child: frame(2, -0.035),
+            top: 0,
+            width: constraints.maxWidth * 0.5 - 1,
+            height: constraints.maxHeight * 0.5 - 1,
+            child: frame(1),
           ),
           Positioned(
-            left: constraints.maxWidth * 0.36,
-            bottom: 4,
-            width: constraints.maxWidth * 0.29,
-            height: constraints.maxHeight * 0.42,
-            child: frame(3, 0.08),
+            left: 0,
+            bottom: 0,
+            width: constraints.maxWidth * 0.5 - 1,
+            height: constraints.maxHeight * 0.5 - 1,
+            child: frame(2),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            width: constraints.maxWidth * 0.5 - 1,
+            height: constraints.maxHeight * 0.5 - 1,
+            child: frame(3),
           ),
         ],
       ),
@@ -1708,15 +1535,14 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.transparent,
       child: InkWell(
         key: const ValueKey('category-all'),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
         child: Ink(
           height: 188,
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xEFFFFFFF),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFDCE5F7)),
+            color: _secondarySystemBackground,
+            borderRadius: BorderRadius.circular(14),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -1728,7 +1554,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(
                     width: coverWidth,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(10),
                       child: FutureBuilder<List<MediaRecord>>(
                         future: allMediaCover,
                         builder: (context, snapshot) =>
@@ -1741,29 +1567,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF4F1FF),
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          child: const Icon(
-                            Icons.photo_library_outlined,
-                            color: Color(0xFF4D51EE),
-                            size: 20,
-                          ),
+                        const Icon(
+                          Icons.photo_library_outlined,
+                          color: _systemBlue,
+                          size: 24,
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 8),
                         const Text(
                           '全部照片与视频',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Color(0xFF111A35),
-                            fontSize: 16,
+                            color: _primaryLabel,
+                            fontSize: 17,
                             height: 1.16,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -1772,48 +1590,25 @@ class _HomeScreenState extends State<HomeScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Color(0xFF6E7892),
-                            fontSize: 11,
+                            color: _secondaryLabel,
+                            fontSize: 13,
                           ),
                         ),
                         const Spacer(),
                         Text(
                           count.hasData ? '${count.data} 项' : '读取中',
                           style: const TextStyle(
-                            color: Color(0xFF245BF0),
-                            fontSize: 18,
+                            color: _secondaryLabel,
+                            fontSize: 15,
                             height: 1,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
-                        const SizedBox(height: 5),
-                        Container(
-                          height: 34,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF0FF),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFB8C9F4)),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '立即清理',
-                                style: TextStyle(
-                                  color: Color(0xFF1746B6),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              SizedBox(width: 3),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Color(0xFF1746B6),
-                                size: 17,
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 6),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: _systemBlue,
+                          size: 22,
                         ),
                       ],
                     ),
@@ -1835,7 +1630,6 @@ class _HomeScreenState extends State<HomeScreen> {
       label: '相似照片',
       count: snapshot.data,
       accent: const Color(0xFF119C9A),
-      surface: const Color(0xFFF0FBF8),
       onTap: () => _open(SimilarPhotosScreen(app)),
     ),
   );
@@ -1843,57 +1637,30 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _compactCategoryList(List<Widget> children) {
     if (children.isEmpty) return const SizedBox.shrink();
     final rows = <Widget>[];
-    var index = 0;
-    if (children.length > 1) {
-      rows.add(
-        Row(
-          children: [
-            Expanded(child: children[0]),
-            const SizedBox(width: 10),
-            Expanded(child: children[1]),
-          ],
-        ),
-      );
-      index = 2;
-    }
-    for (; index < children.length; index++) {
-      if (rows.isNotEmpty) rows.add(const SizedBox(height: 10));
+    for (var index = 0; index < children.length; index++) {
+      if (index > 0) rows.add(const Divider(indent: 56));
       rows.add(children[index]);
     }
-    return Column(
+    return ClipRRect(
       key: const Key('category-grid'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: rows,
+      borderRadius: BorderRadius.circular(14),
+      child: ColoredBox(
+        color: _secondarySystemBackground,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rows,
+        ),
+      ),
     );
   }
 
   Widget _categoryGrid() {
     if (!Platform.isIOS) {
       const categories = [
-        (
-          Scope.videos,
-          Icons.videocam_outlined,
-          Color(0xFF078CA6),
-          Color(0xFFF0FBFD),
-        ),
-        (
-          Scope.screenshots,
-          Icons.screenshot_outlined,
-          Color(0xFF6C4BEF),
-          Color(0xFFF7F4FF),
-        ),
-        (
-          Scope.selfies,
-          Icons.face_outlined,
-          Color(0xFFE8863A),
-          Color(0xFFFFF7EF),
-        ),
-        (
-          Scope.live,
-          Icons.motion_photos_on_outlined,
-          Color(0xFF3978DD),
-          Color(0xFFF1F6FF),
-        ),
+        (Scope.videos, Icons.videocam_outlined, Color(0xFF078CA6)),
+        (Scope.screenshots, Icons.screenshot_outlined, Color(0xFF6C4BEF)),
+        (Scope.selfies, Icons.face_outlined, Color(0xFFE8863A)),
+        (Scope.live, Icons.motion_photos_on_outlined, Color(0xFF3978DD)),
       ];
       return FutureBuilder<List<int>>(
         future: localCategoryCounts,
@@ -1914,7 +1681,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: categories[index].$1.label,
                   count: counts[index],
                   accent: categories[index].$3,
-                  surface: categories[index].$4,
                   onTap: () => _open(ScopeScreen(app, categories[index].$1)),
                 ),
             _similarCategoryTile(),
@@ -1940,29 +1706,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _homeHeader() => Stack(
-    children: [
-      Positioned.fill(
-        child: Image.asset(
-          'assets/home-header-background.png',
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-          excludeFromSemantics: true,
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-        child: Column(
-          children: [
-            _brandHeader(),
-            const SizedBox(height: 12),
-            _heroIntro(),
-            const SizedBox(height: 4),
-            _reviewHero(),
-          ],
-        ),
-      ),
-    ],
+  Widget _homeHeader() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+    child: Column(
+      children: [_brandHeader(), const SizedBox(height: 22), _reviewHero()],
+    ),
   );
 
   Widget _home() => ListView(
@@ -1995,7 +1743,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-            _sectionTitle('照片总览'),
+            _sectionTitle('照片总览', topPadding: 26),
             _allMediaCategoryTile(),
             _sectionTitle('分类整理'),
             _categoryGrid(),
@@ -2004,7 +1752,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: EdgeInsets.only(top: 18),
                 child: Text(
                   '自拍和动态照片在 Android 上没有统一的可靠标记，可在“全部”中查看。',
-                  style: TextStyle(color: Color(0xFF818895), fontSize: 12),
+                  style: TextStyle(color: _secondaryLabel, fontSize: 12),
                 ),
               ),
           ],
@@ -2014,13 +1762,13 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _albumCard(SystemAlbumSummary album) => InkWell(
-    borderRadius: BorderRadius.circular(24),
+    borderRadius: BorderRadius.circular(12),
     onTap: () => _open(SystemAlbumScreen(app, album)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(12),
           child: AspectRatio(
             aspectRatio: 1.2,
             child: album.coverId == null
@@ -2028,7 +1776,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Color(0xFFEAF0FF),
                     child: Icon(
                       Icons.photo_library_outlined,
-                      color: Color(0xFF1557F8),
+                      color: _systemBlue,
                     ),
                   )
                 : MediaThumb(app.media, album.coverId!),
@@ -2043,7 +1791,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         Text(
           '${album.count} 项',
-          style: const TextStyle(color: Color(0xFF818895), fontSize: 12),
+          style: const TextStyle(color: _secondaryLabel, fontSize: 12),
         ),
       ],
     ),
@@ -2085,102 +1833,63 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.transparent,
       child: InkWell(
         key: const Key('album-all-media-hero'),
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => _open(ScopeScreen(app, Scope.all)),
         child: Ink(
           height: 176,
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF163F9D), Color(0xFF5B73F2)],
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x2E264FB8),
-                blurRadius: 22,
-                offset: Offset(0, 10),
-              ),
-            ],
+            color: _secondarySystemBackground,
+            borderRadius: BorderRadius.circular(14),
           ),
-          child: Stack(
-            clipBehavior: Clip.antiAlias,
+          child: Row(
             children: [
-              Positioned(
-                right: -34,
-                top: -42,
-                child: Container(
-                  width: 190,
-                  height: 190,
-                  decoration: const BoxDecoration(
-                    color: Color(0x22FFFFFF),
-                    shape: BoxShape.circle,
+              Expanded(
+                flex: 5,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: FutureBuilder<List<MediaRecord>>(
+                    future: allMediaCover,
+                    builder: (context, snapshot) =>
+                        _allMediaMosaic(snapshot.data ?? const []),
                   ),
                 ),
               ),
-              Positioned(
-                right: 16,
-                top: 22,
-                width: 150,
-                height: 132,
-                child: FutureBuilder<List<MediaRecord>>(
-                  future: allMediaCover,
-                  builder: (context, snapshot) {
-                    final items = snapshot.data ?? const <MediaRecord>[];
-                    return Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        for (var i = 0; i < items.take(3).length; i++)
-                          Positioned(
-                            left: i * 24,
-                            top: i.isEven ? 5 : 28,
-                            width: 92,
-                            height: 104,
-                            child: Transform.rotate(
-                              angle: (i - 1) * 0.09,
-                              child: _heroPhoto(
-                                items[i],
-                                key: ValueKey(
-                                  'album-hero-thumb-${items[i].id}',
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 22, 166, 20),
+              const SizedBox(width: 14),
+              Expanded(
+                flex: 4,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Icon(
                       Icons.photo_library_outlined,
-                      color: Colors.white,
-                      size: 28,
+                      color: _systemBlue,
+                      size: 25,
                     ),
                     const Spacer(),
                     const Text(
                       '全部照片与视频',
                       maxLines: 2,
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
+                        color: _primaryLabel,
+                        fontSize: 17,
                         height: 1.12,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       count.hasData ? '${count.data} 项 · 打开图库' : '正在读取图库',
                       style: const TextStyle(
-                        color: Color(0xFFDCE6FF),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        color: _secondaryLabel,
+                        fontSize: 13,
                       ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: _systemBlue,
+                      size: 22,
                     ),
                   ],
                 ),
@@ -2208,6 +1917,18 @@ class _HomeScreenState extends State<HomeScreen> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
         children: [
+          const Text(
+            '相册',
+            key: Key('albums-large-title'),
+            style: TextStyle(
+              color: _primaryLabel,
+              fontSize: 34,
+              height: 1.08,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 22),
           _albumAllMediaHero(),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(
@@ -2233,7 +1954,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<(String, int?, Color)> _storageMetrics() {
     final metrics = <(String, int?, Color)>[
-      ('照片', storage?.photoBytes, const Color(0xFF1557F8)),
+      ('照片', storage?.photoBytes, _systemBlue),
       ('视频', storage?.videoBytes, const Color(0xFFFF9B37)),
       ('截图', storage?.screenshotBytes, const Color(0xFF7C4DFF)),
       ('实况', storage?.liveBytes, const Color(0xFF2F8A67)),
@@ -2262,7 +1983,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   : storageLoading
                   ? '正在计算授权媒体…'
                   : '等待计算',
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 14),
             if (storageLoading)
@@ -2334,10 +2055,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
                   '$unknown 项暂时无法取得大小，以上为当前授权范围的估算值。',
-                  style: const TextStyle(
-                    color: Color(0xFF818895),
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: _secondaryLabel, fontSize: 12),
                 ),
               ),
           ],
@@ -2358,7 +2076,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const Spacer(),
       Text(
         bytes == null ? '计算中' : _formatBytes(bytes),
-        style: const TextStyle(fontWeight: FontWeight.w800),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
     ],
   );
@@ -2366,6 +2084,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _more() => ListView(
     padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
     children: [
+      const Text(
+        '我的',
+        key: Key('profile-large-title'),
+        style: TextStyle(
+          color: _primaryLabel,
+          fontSize: 34,
+          height: 1.08,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.8,
+        ),
+      ),
+      const SizedBox(height: 22),
       _storageOverview(),
       _sectionTitle('待处理'),
       _queueCard(),
@@ -2413,7 +2143,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Text(
           '照片仅在本机读取。待删除标记不会立即删除媒体。',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Color(0xFF818895), fontSize: 12),
+          style: TextStyle(color: _secondaryLabel, fontSize: 12),
         ),
       ),
     ],
@@ -2443,11 +2173,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
     value: SystemUiOverlayStyle.dark.copyWith(
-      statusBarColor: const Color(0xFFF6FAFF),
+      statusBarColor: _systemBackground,
       systemStatusBarContrastEnforced: false,
     ),
     child: Scaffold(
-      backgroundColor: const Color(0xFFF6FAFF),
+      backgroundColor: _systemBackground,
       extendBody: true,
       body: SafeArea(
         bottom: false,
@@ -2467,20 +2197,20 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-          child: ClipRRect(
+          padding: EdgeInsets.zero,
+          child: ClipRect(
             key: const Key('home-glass-nav'),
-            borderRadius: BorderRadius.circular(28),
             child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+              filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0x70FFFFFF),
-                  border: Border.all(color: const Color(0x99FFFFFF)),
-                  borderRadius: BorderRadius.circular(28),
+                decoration: const BoxDecoration(
+                  color: Color(0xE6F9F9F9),
+                  border: Border(
+                    top: BorderSide(color: _separator, width: 0.5),
+                  ),
                 ),
                 child: NavigationBar(
-                  height: 70,
+                  height: 52,
                   selectedIndex: tab,
                   onDestinationSelected: (index) {
                     setState(() => tab = index);
@@ -2488,19 +2218,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   backgroundColor: Colors.transparent,
                   elevation: 0,
-                  indicatorColor: const Color(0xB8E2E9FF),
                   destinations: const [
                     NavigationDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home_rounded),
+                      key: Key('home-tab'),
+                      icon: Icon(Icons.photo_library_outlined),
+                      selectedIcon: Icon(Icons.photo_library_rounded),
                       label: '首页',
                     ),
                     NavigationDestination(
+                      key: Key('albums-tab'),
                       icon: Icon(Icons.grid_view_outlined),
                       selectedIcon: Icon(Icons.grid_view_rounded),
                       label: '相册',
                     ),
                     NavigationDestination(
+                      key: Key('profile-tab'),
                       icon: Icon(Icons.person_outline_rounded),
                       selectedIcon: Icon(Icons.person_rounded),
                       label: '我的',
@@ -2755,7 +2487,6 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
   final selected = <String, MediaRecord>{};
   int loaded = 0;
   int total = 0;
-  String? coverId;
   bool selecting = false;
   bool queueing = false;
 
@@ -2771,7 +2502,6 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
   void initState() {
     super.initState();
     total = widget.album.count;
-    coverId = widget.album.coverId;
     _load();
   }
 
@@ -2797,7 +2527,6 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
       setState(() {
         records = visible;
         total = visible.length;
-        coverId = visible.isEmpty ? null : visible.first.id;
         selected.removeWhere(
           (id, _) => !visible.any((record) => record.id == id),
         );
@@ -2866,7 +2595,6 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
             ?.where((item) => !selected.containsKey(item.id))
             .toList();
         total = records?.length ?? 0;
-        coverId = records?.isEmpty == false ? records!.first.id : null;
         selected.clear();
         selecting = false;
       });
@@ -2882,12 +2610,10 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
     appBar: _MediaGradientAppBar(
-      media: widget.app.media,
       title: title,
       subtitle: selecting
           ? '已选择 ${selected.length} 项'
           : '${records?.length ?? total} 个项目',
-      coverId: coverId,
       actions: [
         if (!selecting)
           Padding(
@@ -2900,10 +2626,9 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
                     ? _review
                     : null,
                 style: IconButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  disabledForegroundColor: Colors.white54,
-                  backgroundColor: const Color(0x52000000),
-                  side: const BorderSide(color: Color(0x66FFFFFF)),
+                  foregroundColor: _systemBlue,
+                  disabledForegroundColor: _tertiaryLabel,
+                  backgroundColor: Colors.transparent,
                 ),
                 icon: const Icon(Icons.swipe_rounded),
               ),
@@ -2949,7 +2674,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
               final item = records![index];
               final isSelected = selected.containsKey(item.id);
               return ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(4),
                 child: InkWell(
                   key: ValueKey('album-media-${item.id}'),
                   onTap: selecting
@@ -2984,10 +2709,10 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: const Color(0xFF1557F8),
+                                    color: _systemBlue,
                                     width: 3,
                                   ),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
                               ),
                             ),
@@ -3081,7 +2806,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
         const SizedBox(height: 8),
         const Text(
           '仅在本机分析缩略图，不会上传照片',
-          style: TextStyle(color: Color(0xFF818895), fontSize: 12),
+          style: TextStyle(color: _secondaryLabel, fontSize: 12),
         ),
       ],
     ),
@@ -3212,7 +2937,6 @@ class _ScopeScreenState extends State<ScopeScreen> {
   int count = 0;
   int pendingCount = 0;
   int? focusedIndex;
-  String? coverId;
 
   @override
   void initState() {
@@ -3238,9 +2962,6 @@ class _ScopeScreenState extends State<ScopeScreen> {
     final pending = widget.app.downAction == DownSwipeAction.pending
         ? await widget.app.store.count(widget.scope, pendingOnly: true)
         : 0;
-    final cover = total == 0
-        ? null
-        : await widget.app.store.at(widget.scope, 0, pendingOnly: pendingOnly);
     final focus = focusId == null
         ? null
         : await widget.app.store.positionOf(
@@ -3252,7 +2973,6 @@ class _ScopeScreenState extends State<ScopeScreen> {
     setState(() {
       count = total;
       pendingCount = pending;
-      coverId = cover?.id;
       focusedIndex = focus != null && focus >= 0 ? focus : null;
     });
     if (focusedIndex != null) {
@@ -3445,7 +3165,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
   Widget _scopeMediaTile(MediaRecord item, int index) {
     final isSelected = selected.containsKey(item.id);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(4),
       child: InkWell(
         key: ValueKey('scope-media-${item.id}'),
         onTap: selecting ? () => _toggleSelected(item) : () => _open(index),
@@ -3477,11 +3197,8 @@ class _ScopeScreenState extends State<ScopeScreen> {
                   child: IgnorePointer(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFF1557F8),
-                          width: 3,
-                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: _systemBlue, width: 3),
                       ),
                     ),
                   ),
@@ -3493,7 +3210,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
                   child: DecoratedBox(
                     key: Key('focused-scope-item-$index'),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                         color: const Color(0xFFE9A23B),
                         width: 3,
@@ -3621,7 +3338,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
                             setState(() => libraryMenuExpanded = true),
                         icon: const Icon(
                           Icons.photo_library_outlined,
-                          color: Color(0xFF1557F8),
+                          color: _systemBlue,
                         ),
                       ),
                     ),
@@ -3642,9 +3359,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
                                   _LibraryTimeMode.all => '全部',
                                 },
                                 selected: libraryTimeMode == mode,
-                                selectedColor: mode == _LibraryTimeMode.all
-                                    ? const Color(0x8FE2E9FF)
-                                    : const Color(0xB8E2E9FF),
+                                selectedColor: Colors.white,
                                 onTap: () =>
                                     setState(() => libraryTimeMode = mode),
                               ),
@@ -3663,10 +3378,8 @@ class _ScopeScreenState extends State<ScopeScreen> {
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
     appBar: _MediaGradientAppBar(
-      media: widget.app.media,
       title: widget.scope.label,
       subtitle: selecting ? '已选择 ${selected.length} 项' : '$count 个项目',
-      coverId: coverId,
       actions: [
         if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
           _HeaderSelectButton(
@@ -3731,23 +3444,15 @@ class _LibraryGlassControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(28),
+    borderRadius: BorderRadius.circular(16),
     child: BackdropFilter(
-      filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+      filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
       child: SizedBox(
-        height: 56,
+        height: 52,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: const Color(0x70FFFFFF),
-            border: Border.all(color: const Color(0x99FFFFFF)),
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x33000000),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
+            color: const Color(0xE6F9F9F9),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: child,
         ),
@@ -3763,7 +3468,7 @@ class _LibraryControlItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.selectedColor = const Color(0xB8E2E9FF),
+    this.selectedColor = Colors.white,
   });
 
   final IconData? icon;
@@ -3777,9 +3482,9 @@ class _LibraryControlItem extends StatelessWidget {
     padding: const EdgeInsets.all(4),
     child: Material(
       color: selected ? selectedColor : Colors.transparent,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3788,21 +3493,16 @@ class _LibraryControlItem extends StatelessWidget {
               Icon(
                 icon,
                 size: 21,
-                color: selected
-                    ? const Color(0xFF1557F8)
-                    : const Color(0xFF444A55),
+                color: selected ? _systemBlue : _secondaryLabel,
               ),
               const SizedBox(width: 6),
             ],
             Text(
               label,
               style: TextStyle(
-                color: selected
-                    ? const Color(0xFF10131A)
-                    : const Color(0xFF5F6672),
+                color: selected ? _primaryLabel : _secondaryLabel,
                 fontSize: 15,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                shadows: _buttonTextShadows,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
           ],
@@ -3831,10 +3531,10 @@ class _LibraryPeriodCard extends StatelessWidget {
   Widget build(BuildContext context) => FutureBuilder<MediaRecord?>(
     future: app.store.at(scope, 0),
     builder: (context, snapshot) => InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(14),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -3865,7 +3565,7 @@ class _LibraryPeriodCard extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -3913,7 +3613,7 @@ class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
           padding: const EdgeInsets.fromLTRB(0, 22, 0, 12),
           child: Text(
             title,
-            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
           ),
         ),
         GridView.builder(
@@ -3964,7 +3664,7 @@ class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
                   Text(
                     '${album.count} 项',
                     style: const TextStyle(
-                      color: Color(0xFF818895),
+                      color: _secondaryLabel,
                       fontSize: 12,
                     ),
                   ),
@@ -4107,7 +3807,7 @@ class ReviewScreen extends StatefulWidget {
 
 class _ReviewScreenState extends State<ReviewScreen>
     with SingleTickerProviderStateMixin {
-  static const reviewBackground = Color(0xFFF3F4F6);
+  static const reviewBackground = _systemBackground;
   static const _horizontalFlingVelocity = 700.0;
   static const _verticalFlingVelocity = 900.0;
   static const _horizontalFlingDistance = 24.0;
@@ -4209,14 +3909,13 @@ class _ReviewScreenState extends State<ReviewScreen>
                 child: DecoratedBox(
                   key: const Key('edge-notice'),
                   decoration: BoxDecoration(
-                    color: const Color(0x70FFFFFF),
+                    color: const Color(0xE6FFFFFF),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0x99FFFFFF)),
                     boxShadow: const [
                       BoxShadow(
-                        color: Color(0x26000000),
-                        blurRadius: 18,
-                        offset: Offset(0, 8),
+                        color: Color(0x1A000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 5),
                       ),
                     ],
                   ),
@@ -4228,7 +3927,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                     child: Text(
                       message,
                       style: const TextStyle(
-                        color: Color(0xFF10131A),
+                        color: _primaryLabel,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         decoration: TextDecoration.none,
@@ -4977,10 +4676,10 @@ class _ReviewScreenState extends State<ReviewScreen>
         await _exitReview();
         return;
       }
-      final openQueue = await showDialog<bool>(
+      final openQueue = await showAdaptiveDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
+        builder: (context) => AlertDialog.adaptive(
           title: const Text('别忘了删除照片'),
           content: Text(
             '本次整理已完成，待删除队列中还有 $latestQueueCount 项照片或视频尚未最终删除。是否现在进入队列复核并删除？',
@@ -5234,7 +4933,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                           onPressed: busy ? null : _requestExit,
                           diameter: 44,
                           iconSize: 19,
-                          color: const Color(0xB31A2433),
+                          color: const Color(0xA6000000),
                         ),
                       ),
                       Align(
@@ -5244,7 +4943,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                             horizontal: 13,
                             vertical: 8,
                           ),
-                          color: const Color(0xB31A2433),
+                          color: const Color(0xA6000000),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -5255,7 +4954,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   letterSpacing: 0.2,
                                 ),
                               ),
@@ -5318,8 +5017,8 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     diameter: 44,
                                     iconSize: 20,
                                     color: Color.lerp(
-                                      const Color(0xB31A2433),
-                                      const Color(0xF2DC3D55),
+                                      const Color(0xA6000000),
+                                      const Color(0xF2FF3B30),
                                       progress,
                                     )!,
                                   ),
@@ -5340,7 +5039,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     horizontal: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFDC3D55),
+                                    color: _systemRed,
                                     borderRadius: BorderRadius.circular(999),
                                     border: Border.all(
                                       color: Colors.white,
@@ -5354,7 +5053,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
@@ -5394,7 +5093,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     : _toggleFavorite,
                                 color: currentFavorite
                                     ? const Color(0xD9E9A23B)
-                                    : const Color(0xB31A2433),
+                                    : const Color(0xA6000000),
                               ),
                             const SizedBox(width: 12),
                             _glassIcon(
@@ -5429,28 +5128,27 @@ class _ReviewScreenState extends State<ReviewScreen>
   Widget _glass({
     required Widget child,
     required EdgeInsets padding,
-    Color color = const Color(0xB31A2433),
+    Color color = const Color(0xA6000000),
   }) => DecoratedBox(
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(22),
       boxShadow: const [
         BoxShadow(
           color: Color(0x26000000),
-          blurRadius: 18,
-          offset: Offset(0, 8),
+          blurRadius: 12,
+          offset: Offset(0, 5),
         ),
       ],
     ),
     child: ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
+            borderRadius: BorderRadius.circular(22),
           ),
           child: child,
         ),
@@ -5465,7 +5163,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     required VoidCallback? onPressed,
     double diameter = 48,
     double iconSize = 22,
-    Color color = const Color(0xB31A2433),
+    Color color = const Color(0xA6000000),
   }) => _glass(
     padding: EdgeInsets.zero,
     color: color,
@@ -5766,7 +5464,7 @@ class _MediaViewState extends State<MediaView> {
               bottom: widget.videoProgressBottom,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: const Color(0xB31A2433),
+                  color: const Color(0xA6000000),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0x88FFFFFF)),
                   boxShadow: const [
@@ -6016,9 +5714,9 @@ class _QueueScreenState extends State<QueueScreen> {
     if (ids.isEmpty) return false;
     final usesTrash = await widget.app.media.usesRecoverableTrash();
     if (!mounted) return false;
-    final accepted = await showDialog<bool>(
+    final accepted = await showAdaptiveDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AlertDialog.adaptive(
         title: Text('删除 ${ids.length} 项？'),
         content: Text(
           Platform.isIOS
@@ -6033,6 +5731,7 @@ class _QueueScreenState extends State<QueueScreen> {
             child: const Text('返回复核'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _systemRed),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('继续删除'),
           ),
@@ -6065,9 +5764,9 @@ class _QueueScreenState extends State<QueueScreen> {
       final unknownSizes = removedIds
           .where((id) => (sizes[id] ?? 0) <= 0)
           .length;
-      await showDialog<void>(
+      await showAdaptiveDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => AlertDialog.adaptive(
           title: const Text('清理完成'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -6077,16 +5776,16 @@ class _QueueScreenState extends State<QueueScreen> {
                 '本次清理 ${removedIds.length} 项',
                 style: const TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 '预计涉及空间 ${_formatResultBytes(removedBytes)}',
                 style: const TextStyle(
-                  color: Color(0xFF1557F8),
+                  color: _systemBlue,
                   fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               if (unknownSizes > 0)
@@ -6099,7 +5798,7 @@ class _QueueScreenState extends State<QueueScreen> {
                 usesTrash
                     ? '媒体已移入系统最近删除/回收站，实际空间将在系统彻底清理后释放。'
                     : '媒体已从设备删除，系统存储统计可能需要片刻刷新。',
-                style: const TextStyle(color: Color(0xFF687086)),
+                style: const TextStyle(color: _secondaryLabel),
               ),
               if ((counts['cancelled'] ?? 0) > 0 ||
                   (counts['missing'] ?? 0) > 0 ||
@@ -6166,7 +5865,7 @@ class _QueueScreenState extends State<QueueScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               '${rows.length} 项待复核 · 请确认后再交给系统处理',
-              style: const TextStyle(color: Color(0xFF818895)),
+              style: const TextStyle(color: _secondaryLabel),
             ),
           ),
         ),
@@ -6179,7 +5878,7 @@ class _QueueScreenState extends State<QueueScreen> {
                       Icon(
                         Icons.delete_outline,
                         size: 66,
-                        color: Color(0xFFB5C6FF),
+                        color: _tertiaryLabel,
                       ),
                       SizedBox(height: 16),
                       Text(
@@ -6192,7 +5891,7 @@ class _QueueScreenState extends State<QueueScreen> {
                       SizedBox(height: 6),
                       Text(
                         '上滑只会先加入队列，不会直接删除。',
-                        style: TextStyle(color: Color(0xFF818895)),
+                        style: TextStyle(color: _secondaryLabel),
                       ),
                     ],
                   ),
@@ -6217,7 +5916,7 @@ class _QueueScreenState extends State<QueueScreen> {
                     final id = row['media_id'] as String;
                     return ClipRRect(
                       key: ValueKey('queue-item-$id'),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(4),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -6330,9 +6029,7 @@ class _QueueScreenState extends State<QueueScreen> {
                   key: const Key('queue-delete-selected'),
                   height: 52,
                   child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC3D55),
-                    ),
+                    style: FilledButton.styleFrom(backgroundColor: _systemRed),
                     onPressed: busy || selected.isEmpty
                         ? null
                         : () => _process(selected),
@@ -6405,14 +6102,13 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
   }
 
   Widget _glass({required Widget child, EdgeInsets? padding}) => ClipRRect(
-    borderRadius: BorderRadius.circular(24),
+    borderRadius: BorderRadius.circular(20),
     child: BackdropFilter(
       filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0x52000000),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0x66FFFFFF)),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
       ),
@@ -6509,8 +6205,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
                                 '下滑返回待删除列表',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  shadows: _buttonTextShadows,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -6546,7 +6241,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
                                 child: FilledButton.icon(
                                   key: const Key('queue-preview-delete'),
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFFDC3D55),
+                                    backgroundColor: _systemRed,
                                   ),
                                   onPressed: busy
                                       ? null
@@ -6581,28 +6276,46 @@ class SettingsScreen extends StatelessWidget {
     body: AnimatedBuilder(
       animation: app,
       builder: (context, _) => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     '下滑动作',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),
                   const Text(
                     '修改后只影响之后的操作，已有标记会保留。',
-                    style: TextStyle(color: Color(0xFF818895)),
+                    style: TextStyle(color: _secondaryLabel),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: SegmentedButton<DownSwipeAction>(
+                      style: ButtonStyle(
+                        side: const WidgetStatePropertyAll(
+                          BorderSide(color: _separator, width: 0.5),
+                        ),
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? _systemBlue
+                              : Colors.transparent,
+                        ),
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? Colors.white
+                              : _primaryLabel,
+                        ),
+                        textStyle: const WidgetStatePropertyAll(
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                        ),
+                      ),
                       segments: const [
                         ButtonSegment(
                           value: DownSwipeAction.none,
@@ -6626,12 +6339,16 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           const Text(
             '权限与帮助',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              color: _secondaryLabel,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Card(
             margin: EdgeInsets.zero,
             child: Column(
@@ -6666,33 +6383,48 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),
                   title: const Text('隐私说明'),
-                  onTap: () => showAboutDialog(
+                  onTap: () => showAdaptiveDialog<void>(
                     context: context,
-                    applicationName: '相册删除',
-                    children: [
-                      const Text('照片和视频仅在本机读取与显示；整理标记保存在本机。删除必须经过队列复核和系统确认。'),
-                    ],
+                    builder: (context) => AlertDialog.adaptive(
+                      title: const Text('隐私说明'),
+                      content: const Text(
+                        '照片和视频仅在本机读取与显示；整理标记保存在本机。删除必须经过队列复核和系统确认。',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('好'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           const Text(
             '本地数据',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              color: _secondaryLabel,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Card(
             margin: EdgeInsets.zero,
             child: ListTile(
-              leading: const Icon(Icons.restart_alt),
-              title: const Text('清除本地整理记录'),
+              leading: const Icon(Icons.restart_alt, color: _systemRed),
+              title: const Text(
+                '清除本地整理记录',
+                style: TextStyle(color: _systemRed),
+              ),
               subtitle: const Text('不会删除系统照片'),
               onTap: () async {
-                final accepted = await showDialog<bool>(
+                final accepted = await showAdaptiveDialog<bool>(
                   context: context,
-                  builder: (context) => AlertDialog(
+                  builder: (context) => AlertDialog.adaptive(
                     title: const Text('清除本地记录？'),
                     content: const Text('将清除进度、待定、保留和待删除标记，不会删除系统照片。'),
                     actions: [
@@ -6700,7 +6432,10 @@ class SettingsScreen extends StatelessWidget {
                         onPressed: () => Navigator.pop(context, false),
                         child: const Text('取消'),
                       ),
-                      FilledButton(
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: _systemRed,
+                        ),
                         onPressed: () => Navigator.pop(context, true),
                         child: const Text('清除记录'),
                       ),
