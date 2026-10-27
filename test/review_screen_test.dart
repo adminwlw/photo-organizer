@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:album_cleaner/main.dart';
 import 'package:album_cleaner/media_repository.dart';
 import 'package:album_cleaner/store.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -759,7 +759,7 @@ void main() {
     expect(media.albumRequests, 1);
   });
 
-  testWidgets('the first-run tutorial auto-plays four swipe pages', (
+  testWidgets('the first-run tutorial ends with a permission explanation', (
     tester,
   ) async {
     var completed = 0;
@@ -773,23 +773,39 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('1 / 4'), findsOneWidget);
+    expect(find.text('1 / 5'), findsOneWidget);
     expect(find.byKey(const ValueKey('onboarding-page-1')), findsOneWidget);
+    final topStyle = tester
+        .widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.descendant(
+            of: find.byKey(const Key('page-top-gradient')),
+            matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          ),
+        )
+        .single
+        .value;
+    expect(topStyle.statusBarIconBrightness, Brightness.light);
 
     await tester.pump(const Duration(milliseconds: 2800));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('2 / 4'), findsOneWidget);
+    expect(find.text('2 / 5'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
-    expect(find.text('3 / 4'), findsOneWidget);
+    expect(find.text('3 / 5'), findsOneWidget);
     expect(find.bySemanticsLabel('下滑动作可以设置为无、待定或返回相册，当前为待定'), findsOneWidget);
     expect(completed, 0);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
-    expect(find.text('4 / 4'), findsOneWidget);
-    expect(find.text('开始清理'), findsOneWidget);
+    expect(find.text('4 / 5'), findsOneWidget);
+    expect(completed, 0);
+
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('5 / 5'), findsOneWidget);
+    expect(find.text('授权照片访问'), findsOneWidget);
+    expect(find.text('继续授权'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pump();
@@ -822,6 +838,22 @@ void main() {
     await tester.pump();
 
     expect(media.videoFileRequests, 0);
+  });
+
+  testWidgets('video controls start muted and expose a sound toggle', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MediaView(FakeMediaRepository(), video, autoplay: false),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('video-sound-toggle')), findsOneWidget);
+    expect(find.byTooltip('开启声音'), findsOneWidget);
+    expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
   });
 
   testWidgets('a live photo requests its motion clip while held', (
@@ -1491,6 +1523,11 @@ void main() {
 
     expect(find.byType(ReviewScreen), findsNothing);
     expect(find.byKey(const Key('focused-scope-item-80')), findsOneWidget);
+    final gridRect = tester.getRect(find.byKey(const Key('scope-media-grid')));
+    final focusedRect = tester.getRect(
+      find.byKey(const ValueKey('scope-media-photo-80')),
+    );
+    expect((focusedRect.center.dy - gridRect.center.dy).abs(), lessThan(3));
   });
 
   testWidgets('acting on the last item selects the previous remaining item', (
@@ -1642,8 +1679,8 @@ void main() {
     expect(find.byKey(const Key('home-brand')), findsOneWidget);
     expect(find.byKey(const Key('home-large-title')), findsNothing);
     expect(find.byKey(const Key('home-brand-logo')), findsOneWidget);
-    expect(find.byKey(const Key('home-settings')), findsOneWidget);
-    expect(find.byKey(const Key('home-tutorial')), findsNothing);
+    expect(find.byKey(const Key('home-settings')), findsNothing);
+    expect(find.byKey(const Key('home-tutorial')), findsOneWidget);
     expect(find.text('相册删除'), findsOneWidget);
     expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
     expect(find.text('从上次停下的位置继续整理'), findsOneWidget);
@@ -1979,12 +2016,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('media-gradient-app-bar')), findsOneWidget);
-    expect(find.byKey(const Key('media-header-gradient')), findsNothing);
+    expect(find.byKey(const Key('media-header-gradient')), findsOneWidget);
     expect(
       tester
           .widget<AppBar>(find.byKey(const Key('media-gradient-app-bar')))
           .backgroundColor,
-      const Color(0xFFF2F2F7),
+      Colors.transparent,
     );
     expect(find.text('2 个项目'), findsOneWidget);
 
@@ -2358,7 +2395,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
     await tester.pumpAndSettle();
     expect(tester.widget<Scaffold>(find.byType(Scaffold)).extendBody, isTrue);
+    expect(find.byKey(const Key('page-top-gradient')), findsOneWidget);
     expect(find.byKey(const Key('home-glass-nav')), findsOneWidget);
+    expect(find.byKey(const Key('home-glass-reflection')), findsOneWidget);
+    expect(find.byKey(const Key('home-selected-tab-circle')), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
     expect(find.text('更多'), findsNothing);
     expect(

@@ -670,6 +670,29 @@ class MediaRepository {
     }
   }
 
+  Future<List<List<String>>> groupSimilarPhotoHashesInBackground(
+    Map<String, String> hashes, {
+    int maxDistance = similarityMaxDistance,
+  }) => Isolate.run(
+    () => groupSimilarPhotoHashes(hashes, maxDistance: maxDistance),
+  );
+
+  Future<List<List<String>>> _groupSimilarPhotoHashesReliably(
+    Map<String, String> hashes,
+  ) async {
+    try {
+      return await groupSimilarPhotoHashesInBackground(
+        hashes,
+        maxDistance: similarityMaxDistance,
+      );
+    } catch (_) {
+      return groupSimilarPhotoHashes(
+        hashes,
+        maxDistance: similarityMaxDistance,
+      );
+    }
+  }
+
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
     AppStore store,
     void Function(int, int) onProgress, {
@@ -730,12 +753,7 @@ class MediaRepository {
     final orderedHashes = {
       for (final photo in photos) photo.id: ?hashes[photo.id],
     };
-    final groups = await Isolate.run(
-      () => groupSimilarPhotoHashes(
-        orderedHashes,
-        maxDistance: similarityMaxDistance,
-      ),
-    );
+    final groups = await _groupSimilarPhotoHashesReliably(orderedHashes);
     checkCancelled();
     await store.replaceSimilarityGroups(
       groups,
@@ -760,7 +778,7 @@ class MediaRepository {
     final cachedHashes = {
       for (final photo in photos) photo.id: ?hashes[photo.id],
     };
-    return (await Isolate.run(() => groupSimilarPhotoHashes(cachedHashes)))
+    return (await _groupSimilarPhotoHashesReliably(cachedHashes))
         .fold<int>(0, (total, group) => total + group.length);
   }
 

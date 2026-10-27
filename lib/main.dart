@@ -92,6 +92,58 @@ int _albumGridColumnCount(double logicalWidth) {
   );
 }
 
+class _SystemTopGradient extends StatelessWidget {
+  const _SystemTopGradient({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
+      systemStatusBarContrastEnforced: false,
+    ),
+    child: const IgnorePointer(
+      child: SizedBox.expand(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xE6000000), Color(0x00000000)],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SelectedNavIcon extends StatelessWidget {
+  const _SelectedNavIcon(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('home-selected-tab-circle'),
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: const Color(0xD9FFFFFF),
+      shape: BoxShape.circle,
+      border: Border.all(color: const Color(0xF2FFFFFF), width: 0.8),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x1F1557F8),
+          blurRadius: 10,
+          offset: Offset(0, 3),
+        ),
+      ],
+    ),
+    alignment: Alignment.center,
+    child: Icon(icon, color: _systemBlue, size: 23),
+  );
+}
+
 class _FloatingGlassAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   const _FloatingGlassAppBar({required this.title, this.actions});
@@ -106,10 +158,18 @@ class _FloatingGlassAppBar extends StatelessWidget
   Widget build(BuildContext context) => AppBar(
     primary: true,
     toolbarHeight: 52,
-    backgroundColor: _systemBackground,
+    backgroundColor: Colors.transparent,
+    foregroundColor: Colors.white,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
+    systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
+      systemStatusBarContrastEnforced: false,
+    ),
+    flexibleSpace: const _SystemTopGradient(
+      key: Key('floating-header-gradient'),
+    ),
     title: title,
     actions: actions,
   );
@@ -136,20 +196,21 @@ class _MediaGradientAppBar extends StatelessWidget
     primary: true,
     toolbarHeight: 60,
     automaticallyImplyLeading: false,
-    backgroundColor: _systemBackground,
+    backgroundColor: Colors.transparent,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
-    systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+    systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
+    flexibleSpace: const _SystemTopGradient(key: Key('media-header-gradient')),
     leadingWidth: 52,
     leading: IconButton(
       key: const Key('media-header-back'),
       tooltip: '返回',
       onPressed: () => Navigator.maybePop(context),
-      color: _systemBlue,
+      color: Colors.white,
       icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
     ),
     titleSpacing: 0,
@@ -162,7 +223,7 @@ class _MediaGradientAppBar extends StatelessWidget
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: _primaryLabel,
+            color: Colors.white,
             fontSize: 17,
             fontWeight: FontWeight.w600,
             height: 1.12,
@@ -174,7 +235,7 @@ class _MediaGradientAppBar extends StatelessWidget
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: _secondaryLabel,
+            color: Color(0xCCFFFFFF),
             fontSize: 12,
             fontWeight: FontWeight.w400,
           ),
@@ -199,8 +260,8 @@ class _HeaderSelectButton extends StatelessWidget {
         key: const Key('media-select-button'),
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          foregroundColor: _systemBlue,
-          disabledForegroundColor: _tertiaryLabel,
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Color(0x66FFFFFF),
           backgroundColor: Colors.transparent,
           minimumSize: const Size(62, 44),
         ),
@@ -390,53 +451,68 @@ class _StartupBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: _systemBackground,
-    body: SafeArea(
-      child: Center(
-        child: Column(
-          key: const Key('startup-brand'),
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF35C9F2), Color(0xFF246BEB)],
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Icon(
-                Icons.photo_library_rounded,
-                color: Colors.white,
-                size: 46,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '相册删除',
-              style: TextStyle(
-                color: _primaryLabel,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 18),
-            if (error == null)
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else ...[
-              const Text('启动失败，请重试', style: TextStyle(color: _secondaryLabel)),
-              const SizedBox(height: 8),
-              TextButton(onPressed: onRetry, child: const Text('重试')),
-            ],
-          ],
+    body: Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 96,
+          child: _SystemTopGradient(key: Key('page-top-gradient')),
         ),
-      ),
+        SafeArea(
+          child: Center(
+            child: Column(
+              key: const Key('startup-brand'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF35C9F2), Color(0xFF246BEB)],
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_rounded,
+                    color: Colors.white,
+                    size: 46,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '相册删除',
+                  style: TextStyle(
+                    color: _primaryLabel,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (error == null)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else ...[
+                  const Text(
+                    '启动失败，请重试',
+                    style: TextStyle(color: _secondaryLabel),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(onPressed: onRetry, child: const Text('重试')),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }
@@ -603,8 +679,8 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
       ),
       scaffoldBackgroundColor: _systemBackground,
       appBarTheme: const AppBarTheme(
-        backgroundColor: _systemBackground,
-        foregroundColor: _primaryLabel,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -613,7 +689,7 @@ class _CleanerAppState extends State<CleanerApp> with WidgetsBindingObserver {
         titleTextStyle: TextStyle(
           fontSize: 17,
           fontWeight: FontWeight.w600,
-          color: _primaryLabel,
+          color: Colors.white,
         ),
       ),
       cardTheme: CardThemeData(
@@ -768,18 +844,20 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const pageTitles = ['浏览照片', '加入待删除', '设置下滑动作', '删除前复核'];
+  static const pageTitles = ['浏览照片', '加入待删除', '设置下滑动作', '删除前复核', '授权照片访问'];
   static const pageDescriptions = [
     '左右轻扫切换照片，连续浏览时不需要反复返回列表。',
     '向上轻扫只会加入待删除队列，不会立即删除照片。',
     '你可以把下滑设为无、待定或返回相册，之后也能在设置中修改。',
     '在待删除队列中再次检查，确认后才会交给系统处理。',
+    '下一步将由系统询问照片访问权限。完全访问可整理整个图库，受限访问只会显示你选中的照片。',
   ];
   static const pageIcons = [
     Icons.photo_library_outlined,
     Icons.delete_outline_rounded,
     Icons.swipe_down_alt_rounded,
     Icons.check_rounded,
+    Icons.privacy_tip_outlined,
   ];
   final PageController pager = PageController();
   Timer? playbackTimer;
@@ -808,7 +886,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     0 => '左右滑动预览照片，左滑下一张，右滑上一张',
     1 => '上滑删除不想保留的照片，并自动进入下一张',
     2 => '下滑动作可以设置为无、待定或返回相册，当前为${widget.downAction.label}',
-    _ => '左右预览，上滑删除，下滑动作可以自定义',
+    3 => '删除前会再次进入待删除队列复核',
+    _ => '系统即将请求照片访问权限，照片只在本机处理',
   };
 
   Widget _tutorialPage(int index) => Semantics(
@@ -935,91 +1014,106 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: _systemBackground,
     appBar: Navigator.canPop(context)
-        ? AppBar(title: const Text('使用教程'))
+        ? const _FloatingGlassAppBar(title: Text('使用教程'))
         : null,
-    body: SafeArea(
-      child: Column(
-        children: [
-          Expanded(
-            child: PageView.builder(
-              key: const Key('onboarding-pager'),
-              controller: pager,
-              itemCount: pageTitles.length,
-              onPageChanged: (value) {
-                setState(() => page = value);
-                _schedulePlayback();
-              },
-              itemBuilder: (context, index) => _tutorialPage(index),
-            ),
+    body: Stack(
+      fit: StackFit.expand,
+      children: [
+        if (!Navigator.canPop(context))
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 96,
+            child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-            child: Row(
-              children: [
-                Row(
-                  children: List.generate(
-                    pageTitles.length,
-                    (index) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 7),
-                      decoration: BoxDecoration(
-                        color: index == page
-                            ? _systemBlue
-                            : const Color(0x33787880),
-                        borderRadius: BorderRadius.circular(99),
+        SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: PageView.builder(
+                  key: const Key('onboarding-pager'),
+                  controller: pager,
+                  itemCount: pageTitles.length,
+                  onPageChanged: (value) {
+                    setState(() => page = value);
+                    _schedulePlayback();
+                  },
+                  itemBuilder: (context, index) => _tutorialPage(index),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                child: Row(
+                  children: [
+                    Row(
+                      children: List.generate(
+                        pageTitles.length,
+                        (index) => AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 7),
+                          decoration: BoxDecoration(
+                            color: index == page
+                                ? _systemBlue
+                                : const Color(0x33787880),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${page + 1} / ${pageTitles.length}',
-                  key: const Key('onboarding-page-indicator'),
-                  style: const TextStyle(
-                    color: Color(0xFF667085),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                if (page > 0)
-                  IconButton(
-                    key: const Key('onboarding-previous'),
-                    tooltip: '上一页',
-                    onPressed: () => pager.previousPage(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
+                    const SizedBox(width: 8),
+                    Text(
+                      '${page + 1} / ${pageTitles.length}',
+                      key: const Key('onboarding-page-indicator'),
+                      style: const TextStyle(
+                        color: Color(0xFF667085),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                FilledButton(
-                  key: const Key('onboarding-next'),
-                  onPressed: busy
-                      ? null
-                      : () async {
-                          if (page < pageTitles.length - 1) {
-                            pager.nextPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOutCubic,
-                            );
-                          } else {
-                            playbackTimer?.cancel();
-                            setState(() => busy = true);
-                            try {
-                              await widget.onDone();
-                            } finally {
-                              if (mounted) setState(() => busy = false);
-                            }
-                          }
-                        },
-                  child: Text(page == pageTitles.length - 1 ? '开始清理' : '继续'),
+                    const Spacer(),
+                    if (page > 0)
+                      IconButton(
+                        key: const Key('onboarding-previous'),
+                        tooltip: '上一页',
+                        onPressed: () => pager.previousPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                        ),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                    FilledButton(
+                      key: const Key('onboarding-next'),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              if (page < pageTitles.length - 1) {
+                                pager.nextPage(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOutCubic,
+                                );
+                              } else {
+                                playbackTimer?.cancel();
+                                setState(() => busy = true);
+                                try {
+                                  await widget.onDone();
+                                } finally {
+                                  if (mounted) setState(() => busy = false);
+                                }
+                              }
+                            },
+                      child: Text(
+                        page == pageTitles.length - 1 ? '继续授权' : '继续',
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     ),
   );
 }
@@ -1030,7 +1124,7 @@ class PermissionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('照片访问权限')),
+    appBar: const _FloatingGlassAppBar(title: Text('照片访问权限')),
     body: Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -1267,14 +1361,21 @@ class _HomeScreenState extends State<HomeScreen> {
         color: const Color(0xD9FFFFFF),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          key: const Key('home-settings'),
+          key: const Key('home-tutorial'),
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _open(SettingsScreen(app)),
+          onTap: () => _open(
+            OnboardingScreen(
+              downAction: app.downAction,
+              onDone: () async {
+                if (mounted) Navigator.pop(context);
+              },
+            ),
+          ),
           child: const SizedBox(
             width: 48,
             height: 48,
             child: Icon(
-              Icons.settings_outlined,
+              Icons.help_outline_rounded,
               color: Color(0xFF1557F8),
               size: 27,
             ),
@@ -2497,60 +2598,115 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.dark.copyWith(
-      statusBarColor: _systemBackground,
+    value: SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
     child: Scaffold(
       backgroundColor: _systemBackground,
       extendBody: true,
-      body: SafeArea(bottom: false, child: _tabBody()),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 96,
+            child: _SystemTopGradient(key: Key('page-top-gradient')),
+          ),
+          SafeArea(bottom: false, child: _tabBody()),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: Padding(
-          padding: EdgeInsets.zero,
-          child: ClipRect(
+        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 24,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
             key: const Key('home-glass-nav'),
+            borderRadius: BorderRadius.circular(30),
             child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  color: Color(0xE6F9F9F9),
-                  border: Border(
-                    top: BorderSide(color: _separator, width: 0.5),
+              filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+              child: Stack(
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xC7FFFFFF), Color(0x8CF4F4F8)],
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: const Color(0xCFFFFFFF),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: NavigationBar(
+                      height: 62,
+                      selectedIndex: tab,
+                      onDestinationSelected: (index) {
+                        if (index == 1) _ensureAlbumsLoaded();
+                        setState(() => tab = index);
+                        if (index == 2) _calculateStorage();
+                      },
+                      backgroundColor: Colors.transparent,
+                      elevation: 0,
+                      destinations: const [
+                        NavigationDestination(
+                          key: Key('home-tab'),
+                          icon: Icon(Icons.photo_library_outlined),
+                          selectedIcon: _SelectedNavIcon(
+                            Icons.photo_library_rounded,
+                          ),
+                          label: '首页',
+                        ),
+                        NavigationDestination(
+                          key: Key('albums-tab'),
+                          icon: Icon(Icons.grid_view_outlined),
+                          selectedIcon: _SelectedNavIcon(
+                            Icons.grid_view_rounded,
+                          ),
+                          label: '相册',
+                        ),
+                        NavigationDestination(
+                          key: Key('profile-tab'),
+                          icon: Icon(Icons.person_outline_rounded),
+                          selectedIcon: _SelectedNavIcon(Icons.person_rounded),
+                          label: '我的',
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: NavigationBar(
-                  height: 52,
-                  selectedIndex: tab,
-                  onDestinationSelected: (index) {
-                    if (index == 1) _ensureAlbumsLoaded();
-                    setState(() => tab = index);
-                    if (index == 2) _calculateStorage();
-                  },
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  destinations: const [
-                    NavigationDestination(
-                      key: Key('home-tab'),
-                      icon: Icon(Icons.photo_library_outlined),
-                      selectedIcon: Icon(Icons.photo_library_rounded),
-                      label: '首页',
+                  const Positioned(
+                    key: Key('home-glass-reflection'),
+                    left: 24,
+                    right: 24,
+                    top: 1,
+                    height: 1,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0x00FFFFFF),
+                            Color(0xFFFFFFFF),
+                            Color(0x00FFFFFF),
+                          ],
+                        ),
+                      ),
                     ),
-                    NavigationDestination(
-                      key: Key('albums-tab'),
-                      icon: Icon(Icons.grid_view_outlined),
-                      selectedIcon: Icon(Icons.grid_view_rounded),
-                      label: '相册',
-                    ),
-                    NavigationDestination(
-                      key: Key('profile-tab'),
-                      icon: Icon(Icons.person_outline_rounded),
-                      selectedIcon: Icon(Icons.person_rounded),
-                      label: '我的',
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -3662,11 +3818,25 @@ class _ScopeScreenState extends State<ScopeScreen> {
     if (focusedIndex != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !gridController.hasClients) return;
-        final lastRow = (count - 1) ~/ 4;
-        final row = focusedIndex! ~/ 4;
-        final offset = lastRow == 0
-            ? 0.0
-            : gridController.position.maxScrollExtent * row / lastRow;
+        final columns = _photoGridColumnCount(MediaQuery.sizeOf(context).width);
+        const horizontalPadding = 8.0;
+        const topPadding = 6.0;
+        const spacing = 4.0;
+        final itemExtent =
+            (MediaQuery.sizeOf(context).width -
+                horizontalPadding -
+                spacing * (columns - 1)) /
+            columns;
+        final row = focusedIndex! ~/ columns;
+        final itemCenter =
+            topPadding + row * (itemExtent + spacing) + itemExtent / 2;
+        final offset =
+            (itemCenter - gridController.position.viewportDimension / 2)
+                .clamp(
+                  gridController.position.minScrollExtent,
+                  gridController.position.maxScrollExtent,
+                )
+                .toDouble();
         gridController.animateTo(
           offset,
           duration: const Duration(milliseconds: 260),
@@ -5572,7 +5742,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   Widget build(BuildContext context) {
     final item = current;
     final content = AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
+      value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
         systemNavigationBarColor: reviewBackground,
         systemNavigationBarIconBrightness: Brightness.dark,
@@ -5601,6 +5771,13 @@ class _ReviewScreenState extends State<ReviewScreen>
               )
             else
               _mediaStage(item),
+            const Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 112,
+              child: _SystemTopGradient(key: Key('page-top-gradient')),
+            ),
             ValueListenableBuilder<int>(
               valueListenable: gestureFrame,
               builder: (context, _, _) => Visibility(
@@ -5888,6 +6065,7 @@ class MediaView extends StatefulWidget {
 class _MediaViewState extends State<MediaView> {
   VideoPlayerController? player;
   bool loading = false;
+  bool muted = true;
   bool livePhotoPressed = false;
   bool livePhotoPlaying = false;
   bool videoCompleted = false;
@@ -5941,6 +6119,7 @@ class _MediaViewState extends State<MediaView> {
       if (file == null) throw StateError('视频不可访问');
       final controller = VideoPlayerController.file(file);
       await controller.initialize();
+      await controller.setVolume(0);
       if (!mounted) {
         await controller.dispose();
         return;
@@ -6007,6 +6186,26 @@ class _MediaViewState extends State<MediaView> {
     return '$minutes:$seconds';
   }
 
+  Future<void> _toggleMuted() async {
+    final controller = player;
+    if (controller?.value.isInitialized != true) return;
+    final nextMuted = !muted;
+    await controller!.setVolume(nextMuted ? 0 : 1);
+    if (mounted) setState(() => muted = nextMuted);
+  }
+
+  Widget _soundButton({required bool enabled}) => IconButton(
+    key: const Key('video-sound-toggle'),
+    tooltip: muted ? '开启声音' : '关闭声音',
+    onPressed: enabled ? _toggleMuted : null,
+    color: Colors.white,
+    disabledColor: Colors.white54,
+    icon: Icon(
+      muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+      size: 22,
+    ),
+  );
+
   Widget _videoProgress() {
     final controller = player;
     if (controller?.value.isInitialized != true) {
@@ -6021,11 +6220,19 @@ class _MediaViewState extends State<MediaView> {
             ],
           ),
           const SizedBox(height: 5),
-          const LinearProgressIndicator(
-            value: 0,
-            minHeight: 4,
-            color: Colors.white,
-            backgroundColor: Colors.white38,
+          Row(
+            children: [
+              const Expanded(
+                child: LinearProgressIndicator(
+                  value: 0,
+                  minHeight: 4,
+                  color: Colors.white,
+                  backgroundColor: Colors.white38,
+                ),
+              ),
+              const SizedBox(width: 6),
+              _soundButton(enabled: false),
+            ],
           ),
         ],
       );
@@ -6042,15 +6249,23 @@ class _MediaViewState extends State<MediaView> {
               Text(_formatDuration(value.duration)),
             ],
           ),
-          VideoProgressIndicator(
-            controller,
-            allowScrubbing: true,
-            padding: const EdgeInsets.only(top: 5, bottom: 8),
-            colors: const VideoProgressColors(
-              playedColor: Colors.white,
-              bufferedColor: Colors.white54,
-              backgroundColor: Colors.white24,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: VideoProgressIndicator(
+                  controller,
+                  allowScrubbing: true,
+                  padding: const EdgeInsets.only(top: 5, bottom: 8),
+                  colors: const VideoProgressColors(
+                    playedColor: Colors.white,
+                    bufferedColor: Colors.white54,
+                    backgroundColor: Colors.white24,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              _soundButton(enabled: true),
+            ],
           ),
         ],
       ),
@@ -6848,6 +7063,13 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen> {
                 child: MediaView(widget.media, widget.item),
               ),
             ),
+          ),
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 112,
+            child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
           SafeArea(
             minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),

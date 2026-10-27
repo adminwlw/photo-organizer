@@ -17,6 +17,19 @@ class CountingThumbnailRepository extends MediaRepository {
   }
 }
 
+class FailingBackgroundGroupingRepository extends MediaRepository {
+  int backgroundGroupingAttempts = 0;
+
+  @override
+  Future<List<List<String>>> groupSimilarPhotoHashesInBackground(
+    Map<String, String> hashes, {
+    int maxDistance = similarityMaxDistance,
+  }) async {
+    backgroundGroupingAttempts++;
+    throw StateError('background isolate unavailable');
+  }
+}
+
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -423,6 +436,66 @@ void main() {
 
     expect(groups.single.items.map((item) => item.id), ['photo-0', 'photo-1']);
     expect(repository.thumbnailRequests, 0);
+  });
+
+  test('similarity scan falls back when background grouping fails', () async {
+    final store = await AppStore.open(path: inMemoryDatabasePath);
+    addTearDown(store.close);
+    const photos = [
+      MediaRecord(
+        id: 'photo-a',
+        takenAt: 2,
+        modifiedAt: 10,
+        width: 100,
+        height: 80,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+      MediaRecord(
+        id: 'photo-b',
+        takenAt: 1,
+        modifiedAt: 10,
+        width: 100,
+        height: 80,
+        month: '2026-10',
+        type: 1,
+        duration: 0,
+        screenshot: false,
+        selfie: false,
+        live: false,
+      ),
+    ];
+    await store.upsertMediaPage(photos, 1);
+    await store.finishScan(1);
+    await store.saveSimilarityHash(
+      photos[0],
+      '0000000000000000',
+      algorithmVersion: similarityAlgorithmVersion,
+    );
+    await store.saveSimilarityHash(
+      photos[1],
+      '0000000000000001',
+      algorithmVersion: similarityAlgorithmVersion,
+    );
+    final repository = FailingBackgroundGroupingRepository();
+
+    final groups = await repository.findSimilarPhotos(store, (_, _) {});
+
+    expect(repository.backgroundGroupingAttempts, 1);
+    expect(groups.single.items.map((item) => item.id), ['photo-a', 'photo-b']);
+    expect(
+      await store.similarityGroups(
+        algorithmVersion: similarityAlgorithmVersion,
+        maxDistance: similarityMaxDistance,
+      ),
+      [
+        ['photo-a', 'photo-b'],
+      ],
+    );
   });
 
   test('deleting a pending item removes it from the pending list', () async {
