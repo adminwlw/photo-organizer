@@ -1223,11 +1223,11 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen>
     with SingleTickerProviderStateMixin {
-  static const pageTitles = ['浏览照片', '加入待删除', '设置下滑动作', '删除前复核', '授权照片访问'];
+  static const pageTitles = ['浏览照片', '加入待删除', '返回相册', '删除前复核', '授权照片访问'];
   static const pageDescriptions = [
-    '左右轻扫切换照片，连续浏览时不需要反复返回列表。',
+    '左右轻扫切换照片，点按照片可放大查看细节。',
     '向上轻扫只会加入待删除队列，不会立即删除照片。',
-    '你可以把下滑设为无、待定或返回相册，之后也能在设置中修改。',
+    '下滑默认返回相册；也可以在设置中改为无或待定。',
     '在待删除队列中再次检查，确认后才会交给系统处理。',
     '下一步将由系统询问照片访问权限。完全访问可整理整个图库，受限访问只会显示你选中的照片。',
   ];
@@ -1260,14 +1260,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (reduceMotion) {
       motionController.value = 1;
     } else {
-      motionController.forward(from: 0);
+      motionController.repeat(count: 2);
     }
   }
 
   void _schedulePlayback() {
     playbackTimer?.cancel();
     if (page == pageTitles.length - 1) return;
-    playbackTimer = Timer(const Duration(milliseconds: 2800), () {
+    playbackTimer = Timer(const Duration(milliseconds: 3400), () {
       if (!mounted || !pager.hasClients || busy) return;
       pager.nextPage(
         duration: const Duration(milliseconds: 360),
@@ -1277,16 +1277,22 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   String _pageLabel(int index) => switch (index) {
-    0 => '左右滑动预览照片，左滑下一张，右滑上一张',
+    0 => '三张照片，左右轻扫浏览，点按照片可放大查看',
     1 => '上滑删除不想保留的照片，并自动进入下一张',
-    2 => '下滑动作可以设置为无、待定或返回相册，当前为${widget.downAction.label}',
+    2 => '下滑默认返回相册，当前设置为${widget.downAction.label}',
     3 => '删除前会再次进入待删除队列复核',
     _ => '系统即将请求照片访问权限，照片只在本机处理',
   };
 
-  Widget _photoCard({Alignment alignment = Alignment.center}) => Container(
-    width: 142,
-    height: 170,
+  Widget _photoCard({
+    Key? key,
+    Alignment alignment = Alignment.center,
+    double width = 142,
+    double height = 170,
+  }) => Container(
+    key: key,
+    width: width,
+    height: height,
     padding: const EdgeInsets.all(5),
     decoration: BoxDecoration(
       color: Colors.white,
@@ -1311,31 +1317,63 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     ),
   );
 
+  Widget _motionPill({
+    required String label,
+    required IconData icon,
+    required Color color,
+    double opacity = 1,
+  }) => Opacity(
+    opacity: opacity,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xEFFFFFFF),
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _permissionChoice(String label, {bool destructive = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: destructive ? _systemRed : _systemBlue,
+        fontSize: 12,
+        height: 1.1,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+
   Widget _motionScene(int index) => AnimatedBuilder(
     animation: motionController,
     builder: (context, _) {
       final t = Curves.easeInOutCubic.transform(motionController.value);
-      final offset = switch (index) {
-        0 => Offset(-52 * t, 0),
-        1 => Offset(0, -46 * t),
-        2 => Offset(0, 34 * t),
-        _ => Offset.zero,
-      };
-      final labels = [
-        '左右轻扫浏览',
-        '已加入待删除队列',
-        '当前：${widget.downAction.label}',
-        '删除前再次复核',
-        '照片仅在本机处理',
-      ];
-      final icons = [
-        Icons.swipe_rounded,
-        Icons.delete_outline_rounded,
-        Icons.keyboard_arrow_down_rounded,
-        Icons.verified_user_outlined,
-        Icons.lock_outline_rounded,
-      ];
-      final accent = index == 1 ? _systemRed : _systemBlue;
+      final pulse = 1 - (2 * t - 1).abs();
+      final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
       return Container(
         key: ValueKey('onboarding-motion-scene-${index + 1}'),
         width: double.infinity,
@@ -1349,44 +1387,152 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            if (index == 0)
-              Transform.translate(
-                offset: Offset(46 * (1 - t), 0),
-                child: Opacity(
-                  opacity: 0.58 + 0.42 * t,
-                  child: _photoCard(alignment: Alignment.centerRight),
+            if (index == 0) ...[
+              Positioned(
+                left: 38,
+                bottom: 52,
+                child: Transform.translate(
+                  offset: Offset(-5 * pulse, 2 * pulse),
+                  child: _photoCard(
+                    key: const ValueKey('onboarding-browse-photo-left'),
+                    width: 94,
+                    height: 108,
+                    alignment: Alignment.centerLeft,
+                  ),
                 ),
               ),
-            Transform.translate(
-              key: ValueKey('onboarding-motion-target-${index + 1}'),
-              offset: offset,
-              child: Transform.scale(
-                scale: index == 4 ? 0.82 + 0.18 * t : 1,
-                child: index == 4
-                    ? Container(
-                        width: 88,
-                        height: 88,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE5F2FF),
-                          borderRadius: BorderRadius.circular(26),
-                        ),
-                        child: const Icon(
-                          Icons.photo_library_outlined,
-                          color: _systemBlue,
-                          size: 40,
-                        ),
-                      )
-                    : Opacity(
-                        opacity: index == 1 ? 1 - 0.58 * t : 1,
-                        child: _photoCard(
-                          alignment: index == 0
-                              ? Alignment.centerLeft
-                              : Alignment.center,
+              Positioned(
+                right: 38,
+                bottom: 52,
+                child: Transform.translate(
+                  offset: Offset(5 * pulse, 2 * pulse),
+                  child: _photoCard(
+                    key: const ValueKey('onboarding-browse-photo-right'),
+                    width: 94,
+                    height: 108,
+                    alignment: Alignment.centerRight,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 17,
+                child: Transform.translate(
+                  key: const ValueKey('onboarding-motion-target-1'),
+                  offset: Offset(30 * (2 * t - 1), 0),
+                  child: Transform.scale(
+                    scale: 1 + 0.035 * pulse,
+                    child: _photoCard(
+                      key: const ValueKey('onboarding-browse-photo-top'),
+                      width: 108,
+                      height: 128,
+                      alignment: Alignment.center,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (index == 1) ...[
+              Positioned(
+                top: 16,
+                child: Transform.scale(
+                  key: const ValueKey('onboarding-delete-target'),
+                  scale: 0.86 + 0.18 * pulse,
+                  child: Container(
+                    width: 58,
+                    height: 58,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFE9E7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.delete_rounded,
+                      color: _systemRed,
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+              Transform.translate(
+                key: const ValueKey('onboarding-motion-target-2'),
+                offset: Offset(0, 42 - 88 * t),
+                child: Opacity(opacity: 1 - 0.62 * t, child: _photoCard()),
+              ),
+            ],
+            if (index == 2) ...[
+              Positioned(
+                bottom: 42,
+                child: Container(
+                  key: const ValueKey('onboarding-return-album-target'),
+                  width: 170,
+                  height: 92,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x14000000), blurRadius: 16),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            'assets/home-hero-landscape.png',
+                            height: double.infinity,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.centerLeft,
+                            excludeFromSemantics: true,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 7),
+                      const Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '最近项目',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              '返回相册',
+                              style: TextStyle(
+                                color: _secondaryLabel,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            if (index == 3)
+              Transform.translate(
+                key: const ValueKey('onboarding-motion-target-3'),
+                offset: Offset(0, -50 + 62 * t),
+                child: Transform.scale(
+                  scale: 1 - 0.4 * t,
+                  child: Opacity(
+                    opacity: 1 - 0.36 * t,
+                    child: _photoCard(width: 120, height: 142),
+                  ),
+                ),
+              ),
+            ],
+            if (index == 3) ...[
+              Transform.translate(
+                key: const ValueKey('onboarding-motion-target-4'),
+                offset: const Offset(0, -10),
+                child: _photoCard(),
+              ),
               Transform.scale(
                 scale: 0.7 + 0.3 * t,
                 child: Opacity(
@@ -1398,44 +1544,114 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                 ),
               ),
-            Positioned(
-              bottom: 14,
-              child: Opacity(
-                opacity: 0.35 + 0.65 * t,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xEFFFFFFF),
-                    borderRadius: BorderRadius.circular(99),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x14000000),
-                        blurRadius: 14,
-                        offset: Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+            ],
+            if (index == 4)
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 14),
+                  child: Column(
                     children: [
-                      Icon(icons[index], color: accent, size: 18),
-                      const SizedBox(width: 7),
-                      Text(
-                        labels[index],
-                        style: TextStyle(
-                          color: accent,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _photoCard(
+                            key: const ValueKey(
+                              'onboarding-permission-photo-1',
+                            ),
+                            width: 58,
+                            height: 52,
+                            alignment: Alignment.centerLeft,
+                          ),
+                          const SizedBox(width: 7),
+                          _photoCard(
+                            key: const ValueKey(
+                              'onboarding-permission-photo-2',
+                            ),
+                            width: 58,
+                            height: 52,
+                            alignment: Alignment.center,
+                          ),
+                          const SizedBox(width: 7),
+                          _photoCard(
+                            key: const ValueKey(
+                              'onboarding-permission-photo-3',
+                            ),
+                            width: 58,
+                            height: 52,
+                            alignment: Alignment.centerRight,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Transform.scale(
+                        key: const ValueKey('onboarding-motion-target-5'),
+                        scale: 0.96 + 0.04 * t,
+                        child: Container(
+                          width: 242,
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xF7FFFFFF),
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x1A000000),
+                                blurRadius: 16,
+                                offset: Offset(0, 7),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                isIOS ? '允许“相册清理”访问你的照片吗？' : '允许相册清理访问照片和视频吗？',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: _primaryLabel,
+                                  fontSize: 13,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              const Text(
+                                '照片只在本机整理',
+                                style: TextStyle(
+                                  color: _secondaryLabel,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              _permissionChoice(isIOS ? '允许完全访问' : '允许全部'),
+                              _permissionChoice(isIOS ? '选择照片…' : '选择照片和视频'),
+                              _permissionChoice('不允许', destructive: true),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
+            if (index < 4)
+              Positioned(
+                bottom: 14,
+                child: _motionPill(
+                  label: switch (index) {
+                    0 => '左右轻扫 · 点按放大',
+                    1 => '已加入待删除队列',
+                    2 => '返回相册',
+                    _ => '删除前再次复核',
+                  },
+                  icon: switch (index) {
+                    0 => Icons.swipe_rounded,
+                    1 => Icons.delete_outline_rounded,
+                    2 => Icons.photo_library_outlined,
+                    _ => Icons.verified_user_outlined,
+                  },
+                  color: index == 1 ? _systemRed : _systemBlue,
+                  opacity: 0.35 + 0.65 * t,
+                ),
+              ),
           ],
         ),
       );

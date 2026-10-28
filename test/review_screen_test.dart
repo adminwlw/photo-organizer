@@ -766,7 +766,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: OnboardingScreen(
-          downAction: DownSwipeAction.pending,
+          downAction: DownSwipeAction.returnToAlbum,
           onDone: () async => completed++,
         ),
       ),
@@ -779,6 +779,19 @@ void main() {
       find.byKey(const ValueKey('onboarding-motion-scene-1')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('onboarding-browse-photo-top')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('onboarding-browse-photo-left')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('onboarding-browse-photo-right')),
+      findsOneWidget,
+    );
+    expect(find.text('左右轻扫 · 点按放大'), findsOneWidget);
     final startX = tester
         .widget<Transform>(
           find.byKey(const ValueKey('onboarding-motion-target-1')),
@@ -787,14 +800,32 @@ void main() {
         .getTranslation()
         .x;
     await tester.pump(const Duration(milliseconds: 500));
-    final movedX = tester
+    final firstCycleX = tester
         .widget<Transform>(
           find.byKey(const ValueKey('onboarding-motion-target-1')),
         )
         .transform
         .getTranslation()
         .x;
-    expect(movedX, lessThan(startX));
+    expect(firstCycleX, greaterThan(startX));
+    await tester.pump(const Duration(milliseconds: 900));
+    final secondStartX = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('onboarding-motion-target-1')),
+        )
+        .transform
+        .getTranslation()
+        .x;
+    expect(secondStartX, closeTo(startX, 0.01));
+    await tester.pump(const Duration(milliseconds: 500));
+    final secondCycleX = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('onboarding-motion-target-1')),
+        )
+        .transform
+        .getTranslation()
+        .x;
+    expect(secondCycleX, closeTo(firstCycleX, 0.01));
     final topStyle = tester
         .widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
           find.descendant(
@@ -831,11 +862,15 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.pump(const Duration(milliseconds: 2800));
+    await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('2 / 5'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('onboarding-motion-scene-2')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('onboarding-delete-target')),
       findsOneWidget,
     );
 
@@ -846,7 +881,11 @@ void main() {
       find.byKey(const ValueKey('onboarding-motion-scene-3')),
       findsOneWidget,
     );
-    expect(find.bySemanticsLabel('下滑动作可以设置为无、待定或返回相册，当前为待定'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-return-album-target')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel('下滑默认返回相册，当前设置为返回相册'), findsOneWidget);
     expect(completed, 0);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
@@ -867,6 +906,10 @@ void main() {
     );
     expect(find.text('授权照片访问'), findsOneWidget);
     expect(find.text('继续授权'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-permission-photo-1')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pump();
@@ -895,7 +938,36 @@ void main() {
         )
         .transform
         .getTranslation();
-    expect(translation.x, -52);
+    expect(translation.x, 30);
+  });
+
+  testWidgets('the iOS tutorial previews the real photo access choices', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.iOS),
+        home: OnboardingScreen(
+          downAction: DownSwipeAction.returnToAlbum,
+          onDone: () async {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    for (var index = 0; index < 4; index++) {
+      await tester.tap(find.byKey(const Key('onboarding-next')));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text('允许“相册清理”访问你的照片吗？'), findsOneWidget);
+    expect(find.text('允许完全访问'), findsOneWidget);
+    expect(find.text('选择照片…'), findsOneWidget);
+    expect(find.text('不允许'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-permission-photo-3')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the active video preview starts playback automatically', (
