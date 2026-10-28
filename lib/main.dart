@@ -1223,13 +1223,13 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen>
     with SingleTickerProviderStateMixin {
-  static const pageTitles = ['浏览照片', '加入待删除', '返回相册', '删除前复核', '授权照片访问'];
+  static const pageTitles = ['浏览照片', '加入待删除', '返回相册', '批量删除', '授权开始使用'];
   static const pageDescriptions = [
-    '左右轻扫切换照片，点按照片可放大查看细节。',
-    '向上轻扫只会加入待删除队列，不会立即删除照片。',
-    '下滑默认返回相册；也可以在设置中改为无或待定。',
-    '在待删除队列中再次检查，确认后才会交给系统处理。',
-    '下一步将由系统询问照片访问权限。完全访问可整理整个图库，受限访问只会显示你选中的照片。',
+    '左右轻扫查看上一张或下一张，双击或双指可放大细节。',
+    '上滑只会加入待删除队列，不会立即删除；仍可在队列中改为保留。',
+    '下滑默认退出当前照片，返回正在整理的相册列表。',
+    '进入待删除队列，勾选照片后批量删除；未选中的照片继续保留。',
+    '首次使用请选择最上方的完整访问选项，才能整理整个图库。照片只在本机处理。',
   ];
   final PageController pager = PageController();
   late final AnimationController motionController;
@@ -1277,15 +1277,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   String _pageLabel(int index) => switch (index) {
-    0 => '三张照片，左右轻扫浏览，点按照片可放大查看',
-    1 => '上滑删除不想保留的照片，并自动进入下一张',
-    2 => '下滑默认返回相册，当前设置为${widget.downAction.label}',
-    3 => '删除前会再次进入待删除队列复核',
-    _ => '系统即将请求照片访问权限，照片只在本机处理',
+    0 => '左右轻扫分页浏览，双击或双指放大照片',
+    1 => '上滑将照片加入待删除队列，之后仍可改为保留',
+    2 => '下滑退出当前照片并返回当前相册列表，当前设置为${widget.downAction.label}',
+    3 => '进入待删除队列，选择照片后批量删除',
+    _ => '授权开始使用，建议选择完整照片访问权限，照片只在本机处理',
   };
 
   Widget _photoCard({
     Key? key,
+    String asset = 'assets/tutorial-portrait.png',
     Alignment alignment = Alignment.center,
     double width = 142,
     double height = 170,
@@ -1308,7 +1309,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     child: ClipRRect(
       borderRadius: BorderRadius.circular(19),
       child: Image.asset(
-        'assets/home-hero-landscape.png',
+        asset,
         fit: BoxFit.cover,
         alignment: alignment,
         cacheWidth: 480,
@@ -1355,15 +1356,83 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     ),
   );
 
-  Widget _permissionChoice(String label, {bool destructive = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Text(
-      label,
-      style: TextStyle(
-        color: destructive ? _systemRed : _systemBlue,
-        fontSize: 12,
-        height: 1.1,
-        fontWeight: FontWeight.w600,
+  Widget _permissionChoice(
+    String label, {
+    Key? key,
+    bool destructive = false,
+    bool highlighted = false,
+  }) => Container(
+    key: key,
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(
+      color: highlighted ? const Color(0x1F007AFF) : Colors.transparent,
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (highlighted) ...[
+          const Icon(Icons.check_circle_rounded, color: _systemBlue, size: 14),
+          const SizedBox(width: 5),
+        ],
+        Text(
+          label,
+          style: TextStyle(
+            color: destructive ? _systemRed : _systemBlue,
+            fontSize: 12,
+            height: 1.1,
+            fontWeight: highlighted ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _tutorialThumb(
+    String asset, {
+    Key? key,
+    double width = 58,
+    double height = 52,
+    bool selected = false,
+  }) => Container(
+    key: key,
+    width: width,
+    height: height,
+    padding: EdgeInsets.all(selected ? 2 : 0),
+    decoration: BoxDecoration(
+      color: selected ? _systemBlue : Colors.transparent,
+      borderRadius: BorderRadius.circular(11),
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(selected ? 9 : 11),
+      child: Image.asset(asset, fit: BoxFit.cover, cacheWidth: 240),
+    ),
+  );
+
+  Widget _queueThumb(String asset, {required bool selected}) => Expanded(
+    child: AspectRatio(
+      aspectRatio: 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(asset, fit: BoxFit.cover, cacheWidth: 240),
+            if (selected)
+              const Positioned(
+                right: 5,
+                top: 5,
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  color: _systemBlue,
+                  size: 18,
+                  shadows: [Shadow(color: Colors.white, blurRadius: 4)],
+                ),
+              ),
+          ],
+        ),
       ),
     ),
   );
@@ -1371,8 +1440,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _motionScene(int index) => AnimatedBuilder(
     animation: motionController,
     builder: (context, _) {
-      final t = Curves.easeInOutCubic.transform(motionController.value);
-      final pulse = 1 - (2 * t - 1).abs();
+      final phase = motionController.value;
+      double segment(double start, double end) =>
+          ((phase - start) / (end - start)).clamp(0.0, 1.0);
+      final browseProgress = phase < 0.5
+          ? Curves.easeInOutCubic.transform(segment(0.08, 0.38))
+          : 1 - Curves.easeInOutCubic.transform(segment(0.62, 0.92));
+      final actionProgress = Curves.easeOutCubic.transform(segment(0.12, 0.68));
+      final confirmationProgress = Curves.easeOut.transform(
+        segment(0.58, 0.76),
+      );
+      final pulse = 1 - (2 * phase - 1).abs();
       final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
       return Container(
         key: ValueKey('onboarding-motion-scene-${index + 1}'),
@@ -1389,83 +1467,176 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           children: [
             if (index == 0) ...[
               Positioned(
-                left: 38,
-                bottom: 52,
-                child: Transform.translate(
-                  offset: Offset(-5 * pulse, 2 * pulse),
-                  child: _photoCard(
-                    key: const ValueKey('onboarding-browse-photo-left'),
-                    width: 94,
-                    height: 108,
-                    alignment: Alignment.centerLeft,
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 38,
-                bottom: 52,
-                child: Transform.translate(
-                  offset: Offset(5 * pulse, 2 * pulse),
-                  child: _photoCard(
-                    key: const ValueKey('onboarding-browse-photo-right'),
-                    width: 94,
-                    height: 108,
-                    alignment: Alignment.centerRight,
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 17,
-                child: Transform.translate(
-                  key: const ValueKey('onboarding-motion-target-1'),
-                  offset: Offset(30 * (2 * t - 1), 0),
-                  child: Transform.scale(
-                    scale: 1 + 0.035 * pulse,
-                    child: _photoCard(
-                      key: const ValueKey('onboarding-browse-photo-top'),
-                      width: 108,
-                      height: 128,
-                      alignment: Alignment.center,
+                left: 36,
+                right: 36,
+                top: 14,
+                height: 148,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(color: Color(0xFF111111)),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Transform.translate(
+                            key: const ValueKey('onboarding-motion-target-1'),
+                            offset: Offset(
+                              -constraints.maxWidth * browseProgress,
+                              0,
+                            ),
+                            child: Image.asset(
+                              'assets/tutorial-portrait.png',
+                              key: const ValueKey(
+                                'onboarding-browse-photo-top',
+                              ),
+                              fit: BoxFit.cover,
+                              cacheWidth: 560,
+                            ),
+                          ),
+                          Transform.translate(
+                            key: const ValueKey(
+                              'onboarding-browse-incoming-photo',
+                            ),
+                            offset: Offset(
+                              constraints.maxWidth * (1 - browseProgress),
+                              0,
+                            ),
+                            child: Image.asset(
+                              'assets/tutorial-landscape.png',
+                              fit: BoxFit.cover,
+                              cacheWidth: 560,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
+                ),
+              ),
+              Positioned(
+                top: 170,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _tutorialThumb(
+                      'assets/tutorial-portrait.png',
+                      key: const ValueKey('onboarding-browse-photo-left'),
+                      width: 46,
+                      height: 34,
+                      selected: browseProgress < 0.5,
+                    ),
+                    const SizedBox(width: 5),
+                    _tutorialThumb(
+                      'assets/tutorial-landscape.png',
+                      width: 46,
+                      height: 34,
+                      selected: browseProgress >= 0.5,
+                    ),
+                    const SizedBox(width: 5),
+                    _tutorialThumb(
+                      'assets/tutorial-still-life.png',
+                      key: const ValueKey('onboarding-browse-photo-right'),
+                      width: 46,
+                      height: 34,
+                    ),
+                  ],
                 ),
               ),
             ],
             if (index == 1) ...[
+              Transform.scale(
+                scale: 0.98 + 0.02 * actionProgress,
+                child: Opacity(
+                  opacity: actionProgress,
+                  child: _photoCard(
+                    key: const ValueKey('onboarding-delete-next-photo'),
+                    asset: 'assets/tutorial-portrait.png',
+                  ),
+                ),
+              ),
               Positioned(
                 top: 16,
-                child: Transform.scale(
-                  key: const ValueKey('onboarding-delete-target'),
-                  scale: 0.86 + 0.18 * pulse,
-                  child: Container(
-                    width: 58,
-                    height: 58,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFE9E7),
-                      shape: BoxShape.circle,
+                right: 18,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Transform.scale(
+                      key: const ValueKey('onboarding-delete-target'),
+                      scale: 0.9 + 0.16 * pulse,
+                      child: Container(
+                        width: 54,
+                        height: 54,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFE9E7),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: _systemRed,
+                          size: 28,
+                        ),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.delete_rounded,
-                      color: _systemRed,
-                      size: 30,
-                    ),
-                  ),
+                    if (confirmationProgress > 0)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Opacity(
+                          opacity: confirmationProgress,
+                          child: Container(
+                            width: 21,
+                            height: 21,
+                            alignment: Alignment.center,
+                            decoration: const BoxDecoration(
+                              color: _systemRed,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Text(
+                              '1',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               Transform.translate(
                 key: const ValueKey('onboarding-motion-target-2'),
-                offset: Offset(0, 42 - 88 * t),
-                child: Opacity(opacity: 1 - 0.62 * t, child: _photoCard()),
+                offset: Offset(105 * actionProgress, 28 - 88 * actionProgress),
+                child: Transform.scale(
+                  scale: 1 - 0.82 * actionProgress,
+                  child: Opacity(
+                    opacity: 1 - actionProgress,
+                    child: _photoCard(asset: 'assets/tutorial-landscape.png'),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 78,
+                right: 16,
+                child: _motionPill(
+                  label: '已加入待删除队列',
+                  icon: Icons.check_circle_rounded,
+                  color: _systemRed,
+                  opacity: confirmationProgress,
+                ),
               ),
             ],
             if (index == 2) ...[
               Positioned(
-                bottom: 42,
+                left: 24,
+                right: 24,
+                top: 14,
+                bottom: 48,
                 child: Container(
                   key: const ValueKey('onboarding-return-album-target'),
-                  width: 170,
-                  height: 92,
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
@@ -1473,42 +1644,62 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       BoxShadow(color: Color(0x14000000), blurRadius: 16),
                     ],
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.asset(
-                            'assets/home-hero-landscape.png',
-                            height: double.infinity,
-                            fit: BoxFit.cover,
-                            alignment: Alignment.centerLeft,
-                            excludeFromSemantics: true,
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: _systemBlue,
+                            size: 13,
                           ),
-                        ),
+                          SizedBox(width: 5),
+                          Text(
+                            '当前相册',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Spacer(),
+                          Text(
+                            '18 张',
+                            style: TextStyle(
+                              color: _secondaryLabel,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 7),
-                      const Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '最近项目',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              '返回相册',
-                              style: TextStyle(
-                                color: _secondaryLabel,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: GridView.count(
+                          key: const ValueKey('onboarding-current-album-grid'),
+                          padding: EdgeInsets.zero,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 4,
+                          crossAxisSpacing: 4,
+                          children:
+                              [
+                                    'assets/tutorial-portrait.png',
+                                    'assets/tutorial-landscape.png',
+                                    'assets/tutorial-still-life.png',
+                                    'assets/tutorial-landscape.png',
+                                    'assets/tutorial-still-life.png',
+                                    'assets/tutorial-portrait.png',
+                                  ]
+                                  .map(
+                                    (asset) => ClipRRect(
+                                      borderRadius: BorderRadius.circular(7),
+                                      child: Image.asset(
+                                        asset,
+                                        fit: BoxFit.cover,
+                                        cacheWidth: 180,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                         ),
                       ),
                     ],
@@ -1517,30 +1708,109 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
               Transform.translate(
                 key: const ValueKey('onboarding-motion-target-3'),
-                offset: Offset(0, -50 + 62 * t),
+                offset: Offset(0, -22 + 118 * actionProgress),
                 child: Transform.scale(
-                  scale: 1 - 0.4 * t,
+                  scale: 1 - 0.48 * actionProgress,
                   child: Opacity(
-                    opacity: 1 - 0.36 * t,
-                    child: _photoCard(width: 120, height: 142),
+                    opacity: 1 - actionProgress,
+                    child: _photoCard(
+                      asset: 'assets/tutorial-still-life.png',
+                      width: 124,
+                      height: 148,
+                    ),
                   ),
                 ),
               ),
             ],
             if (index == 3) ...[
-              Transform.translate(
-                key: const ValueKey('onboarding-motion-target-4'),
-                offset: const Offset(0, -10),
-                child: _photoCard(),
-              ),
-              Transform.scale(
-                scale: 0.7 + 0.3 * t,
-                child: Opacity(
-                  opacity: t,
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: _systemBlue,
-                    size: 62,
+              Positioned(
+                left: 20,
+                right: 20,
+                top: 12,
+                bottom: 48,
+                child: Container(
+                  key: const ValueKey('onboarding-motion-target-4'),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x14000000), blurRadius: 16),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      const Row(
+                        children: [
+                          Text(
+                            '待删除队列',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Spacer(),
+                          Text(
+                            '全选',
+                            style: TextStyle(
+                              color: _systemBlue,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        key: const ValueKey('onboarding-queue-grid'),
+                        children: [
+                          _queueThumb(
+                            'assets/tutorial-portrait.png',
+                            selected: actionProgress > 0.3,
+                          ),
+                          const SizedBox(width: 5),
+                          _queueThumb(
+                            'assets/tutorial-landscape.png',
+                            selected: actionProgress > 0.45,
+                          ),
+                          const SizedBox(width: 5),
+                          _queueThumb(
+                            'assets/tutorial-still-life.png',
+                            selected: actionProgress > 0.6,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 9),
+                      Transform.scale(
+                        scale: 0.96 + 0.04 * confirmationProgress,
+                        child: Container(
+                          key: const ValueKey('onboarding-batch-delete'),
+                          width: double.infinity,
+                          height: 32,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Color.lerp(
+                              const Color(0xFFFFE9E7),
+                              _systemRed,
+                              confirmationProgress,
+                            ),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Text(
+                            '删除 3 项',
+                            style: TextStyle(
+                              color: Color.lerp(
+                                _systemRed,
+                                Colors.white,
+                                confirmationProgress,
+                              ),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1548,47 +1818,41 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             if (index == 4)
               Positioned.fill(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 14),
+                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 12),
                   child: Column(
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _photoCard(
+                          _tutorialThumb(
+                            'assets/tutorial-portrait.png',
                             key: const ValueKey(
                               'onboarding-permission-photo-1',
                             ),
-                            width: 58,
-                            height: 52,
-                            alignment: Alignment.centerLeft,
                           ),
                           const SizedBox(width: 7),
-                          _photoCard(
+                          _tutorialThumb(
+                            'assets/tutorial-landscape.png',
                             key: const ValueKey(
                               'onboarding-permission-photo-2',
                             ),
-                            width: 58,
-                            height: 52,
-                            alignment: Alignment.center,
                           ),
                           const SizedBox(width: 7),
-                          _photoCard(
+                          _tutorialThumb(
+                            'assets/tutorial-still-life.png',
                             key: const ValueKey(
                               'onboarding-permission-photo-3',
                             ),
-                            width: 58,
-                            height: 52,
-                            alignment: Alignment.centerRight,
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Transform.scale(
                         key: const ValueKey('onboarding-motion-target-5'),
-                        scale: 0.96 + 0.04 * t,
+                        scale: 0.97 + 0.03 * pulse,
                         child: Container(
                           width: 242,
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 9),
+                          padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
                           decoration: BoxDecoration(
                             color: const Color(0xF7FFFFFF),
                             borderRadius: BorderRadius.circular(18),
@@ -1620,8 +1884,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                   fontSize: 10,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              _permissionChoice(isIOS ? '允许完全访问' : '允许全部'),
+                              _permissionChoice(
+                                isIOS ? '允许完全访问' : '允许全部',
+                                key: const ValueKey(
+                                  'onboarding-permission-allow-all',
+                                ),
+                                highlighted: true,
+                              ),
                               _permissionChoice(isIOS ? '选择照片…' : '选择照片和视频'),
                               _permissionChoice('不允许', destructive: true),
                             ],
@@ -1634,22 +1903,24 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             if (index < 4)
               Positioned(
-                bottom: 14,
+                bottom: 8,
                 child: _motionPill(
                   label: switch (index) {
-                    0 => '左右轻扫 · 点按放大',
-                    1 => '已加入待删除队列',
-                    2 => '返回相册',
-                    _ => '删除前再次复核',
+                    0 => '左右轻扫 · 双击放大',
+                    1 => '上滑加入队列',
+                    2 => '下滑返回当前相册',
+                    _ => '进入队列 · 选择 · 批量删除',
                   },
                   icon: switch (index) {
                     0 => Icons.swipe_rounded,
                     1 => Icons.delete_outline_rounded,
                     2 => Icons.photo_library_outlined,
-                    _ => Icons.verified_user_outlined,
+                    _ => Icons.delete_sweep_outlined,
                   },
-                  color: index == 1 ? _systemRed : _systemBlue,
-                  opacity: 0.35 + 0.65 * t,
+                  color: index == 1 || index == 3 ? _systemRed : _systemBlue,
+                  opacity: index == 0
+                      ? 0.72 + 0.28 * pulse
+                      : 0.4 + 0.6 * actionProgress,
                 ),
               ),
           ],
@@ -1727,22 +1998,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             padding: EdgeInsets.only(top: Navigator.canPop(context) ? 52 : 0),
             child: Column(
               children: [
-                Expanded(
-                  child: PageView.builder(
-                    key: const Key('onboarding-pager'),
-                    controller: pager,
-                    itemCount: pageTitles.length,
-                    onPageChanged: (value) {
-                      setState(() => page = value);
-                      _playMotion();
-                      _schedulePlayback();
-                    },
-                    itemBuilder: (context, index) => _tutorialPage(index),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                  key: const Key('onboarding-progress'),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Row(
                         children: List.generate(
@@ -1770,19 +2030,48 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const Spacer(),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: PageView.builder(
+                    key: const Key('onboarding-pager'),
+                    controller: pager,
+                    itemCount: pageTitles.length,
+                    onPageChanged: (value) {
+                      setState(() => page = value);
+                      _playMotion();
+                      _schedulePlayback();
+                    },
+                    itemBuilder: (context, index) => _tutorialPage(index),
+                  ),
+                ),
+                Padding(
+                  key: const Key('onboarding-navigation'),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                       if (page > 0)
-                        IconButton(
+                        FilledButton.tonal(
                           key: const Key('onboarding-previous'),
-                          tooltip: '上一页',
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(108, 48),
+                            backgroundColor: const Color(0x14007AFF),
+                            foregroundColor: _systemBlue,
+                          ),
                           onPressed: () => pager.previousPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeOutCubic,
                           ),
-                          icon: const Icon(Icons.arrow_back_rounded),
+                          child: const Text('返回'),
                         ),
+                      if (page > 0) const SizedBox(width: 12),
                       FilledButton(
                         key: const Key('onboarding-next'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(108, 48),
+                        ),
                         onPressed: busy
                             ? null
                             : () async {

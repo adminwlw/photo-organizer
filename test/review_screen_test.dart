@@ -791,7 +791,38 @@ void main() {
       find.byKey(const ValueKey('onboarding-browse-photo-right')),
       findsOneWidget,
     );
-    expect(find.text('左右轻扫 · 点按放大'), findsOneWidget);
+    expect(find.text('左右轻扫 · 双击放大'), findsOneWidget);
+    final tutorialAssets = tester
+        .widgetList<Image>(
+          find.descendant(
+            of: find.byKey(const ValueKey('onboarding-motion-scene-1')),
+            matching: find.byType(Image),
+          ),
+        )
+        .map((image) {
+          final provider = image.image;
+          final asset = provider is ResizeImage
+              ? provider.imageProvider as AssetImage
+              : provider as AssetImage;
+          return asset.assetName;
+        })
+        .toSet();
+    expect(
+      tutorialAssets,
+      containsAll(const [
+        'assets/tutorial-portrait.png',
+        'assets/tutorial-landscape.png',
+        'assets/tutorial-still-life.png',
+      ]),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('onboarding-progress'))).dy,
+      lessThan(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('onboarding-motion-scene-1')))
+            .dy,
+      ),
+    );
     final startX = tester
         .widget<Transform>(
           find.byKey(const ValueKey('onboarding-motion-target-1')),
@@ -807,7 +838,7 @@ void main() {
         .transform
         .getTranslation()
         .x;
-    expect(firstCycleX, greaterThan(startX));
+    expect(firstCycleX, lessThan(startX));
     await tester.pump(const Duration(milliseconds: 900));
     final secondStartX = tester
         .widget<Transform>(
@@ -873,6 +904,12 @@ void main() {
       find.byKey(const ValueKey('onboarding-delete-target')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('onboarding-delete-next-photo')),
+      findsOneWidget,
+    );
+    expect(find.text('已加入待删除队列'), findsOneWidget);
+    expect(find.text('返回'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
@@ -885,7 +922,14 @@ void main() {
       find.byKey(const ValueKey('onboarding-return-album-target')),
       findsOneWidget,
     );
-    expect(find.bySemanticsLabel('下滑默认返回相册，当前设置为返回相册'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('下滑退出当前照片并返回当前相册列表，当前设置为返回相册'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('onboarding-current-album-grid')),
+      findsOneWidget,
+    );
     expect(completed, 0);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
@@ -893,6 +937,12 @@ void main() {
     expect(find.text('4 / 5'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('onboarding-motion-scene-4')),
+      findsOneWidget,
+    );
+    expect(find.text('批量删除'), findsOneWidget);
+    expect(find.byKey(const ValueKey('onboarding-queue-grid')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-batch-delete')),
       findsOneWidget,
     );
     expect(completed, 0);
@@ -904,8 +954,16 @@ void main() {
       find.byKey(const ValueKey('onboarding-motion-scene-5')),
       findsOneWidget,
     );
-    expect(find.text('授权照片访问'), findsOneWidget);
+    expect(find.text('授权开始使用'), findsOneWidget);
     expect(find.text('继续授权'), findsOneWidget);
+    expect(find.text('允许全部'), findsOneWidget);
+    final highlightedChoice = tester.widget<Container>(
+      find.byKey(const ValueKey('onboarding-permission-allow-all')),
+    );
+    expect(
+      (highlightedChoice.decoration! as BoxDecoration).color,
+      const Color(0x1F007AFF),
+    );
     expect(
       find.byKey(const ValueKey('onboarding-permission-photo-1')),
       findsOneWidget,
@@ -938,7 +996,7 @@ void main() {
         )
         .transform
         .getTranslation();
-    expect(translation.x, 30);
+    expect(translation.x, 0);
   });
 
   testWidgets('the iOS tutorial previews the real photo access choices', (
@@ -964,6 +1022,10 @@ void main() {
     expect(find.text('允许完全访问'), findsOneWidget);
     expect(find.text('选择照片…'), findsOneWidget);
     expect(find.text('不允许'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-permission-allow-all')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('onboarding-permission-photo-3')),
       findsOneWidget,
