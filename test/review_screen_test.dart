@@ -775,6 +775,26 @@ void main() {
 
     expect(find.text('1 / 5'), findsOneWidget);
     expect(find.byKey(const ValueKey('onboarding-page-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-motion-scene-1')),
+      findsOneWidget,
+    );
+    final startX = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('onboarding-motion-target-1')),
+        )
+        .transform
+        .getTranslation()
+        .x;
+    await tester.pump(const Duration(milliseconds: 500));
+    final movedX = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('onboarding-motion-target-1')),
+        )
+        .transform
+        .getTranslation()
+        .x;
+    expect(movedX, lessThan(startX));
     final topStyle = tester
         .widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
           find.descendant(
@@ -814,27 +834,68 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2800));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('2 / 5'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-motion-scene-2')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('3 / 5'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-motion-scene-3')),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel('下滑动作可以设置为无、待定或返回相册，当前为待定'), findsOneWidget);
     expect(completed, 0);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('4 / 5'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-motion-scene-4')),
+      findsOneWidget,
+    );
     expect(completed, 0);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('5 / 5'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-motion-scene-5')),
+      findsOneWidget,
+    );
     expect(find.text('授权照片访问'), findsOneWidget);
     expect(find.text('继续授权'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pump();
     expect(completed, 1);
+  });
+
+  testWidgets('the tutorial shows its final state when motion is reduced', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: OnboardingScreen(
+            downAction: DownSwipeAction.returnToAlbum,
+            onDone: () async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final translation = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('onboarding-motion-target-1')),
+        )
+        .transform
+        .getTranslation();
+    expect(translation.x, -52);
   });
 
   testWidgets('the active video preview starts playback automatically', (

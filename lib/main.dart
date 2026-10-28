@@ -1221,7 +1221,8 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with SingleTickerProviderStateMixin {
   static const pageTitles = ['浏览照片', '加入待删除', '设置下滑动作', '删除前复核', '授权照片访问'];
   static const pageDescriptions = [
     '左右轻扫切换照片，连续浏览时不需要反复返回列表。',
@@ -1230,22 +1231,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     '在待删除队列中再次检查，确认后才会交给系统处理。',
     '下一步将由系统询问照片访问权限。完全访问可整理整个图库，受限访问只会显示你选中的照片。',
   ];
-  static const pageIcons = [
-    Icons.photo_library_outlined,
-    Icons.delete_outline_rounded,
-    Icons.swipe_down_alt_rounded,
-    Icons.check_rounded,
-    Icons.privacy_tip_outlined,
-  ];
   final PageController pager = PageController();
+  late final AnimationController motionController;
   Timer? playbackTimer;
   int page = 0;
   bool busy = false;
+  bool reduceMotion = false;
 
   @override
   void initState() {
     super.initState();
+    motionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
     _schedulePlayback();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    reduceMotion = MediaQuery.of(context).disableAnimations;
+    _playMotion();
+  }
+
+  void _playMotion() {
+    motionController.stop();
+    if (reduceMotion) {
+      motionController.value = 1;
+    } else {
+      motionController.forward(from: 0);
+    }
   }
 
   void _schedulePlayback() {
@@ -1268,88 +1284,182 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _ => '系统即将请求照片访问权限，照片只在本机处理',
   };
 
+  Widget _photoCard({Alignment alignment = Alignment.center}) => Container(
+    width: 142,
+    height: 170,
+    padding: const EdgeInsets.all(5),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(24),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x1F000000),
+          blurRadius: 22,
+          offset: Offset(0, 10),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(19),
+      child: Image.asset(
+        'assets/home-hero-landscape.png',
+        fit: BoxFit.cover,
+        alignment: alignment,
+        cacheWidth: 480,
+        excludeFromSemantics: true,
+      ),
+    ),
+  );
+
+  Widget _motionScene(int index) => AnimatedBuilder(
+    animation: motionController,
+    builder: (context, _) {
+      final t = Curves.easeInOutCubic.transform(motionController.value);
+      final offset = switch (index) {
+        0 => Offset(-52 * t, 0),
+        1 => Offset(0, -46 * t),
+        2 => Offset(0, 34 * t),
+        _ => Offset.zero,
+      };
+      final labels = [
+        '左右轻扫浏览',
+        '已加入待删除队列',
+        '当前：${widget.downAction.label}',
+        '删除前再次复核',
+        '照片仅在本机处理',
+      ];
+      final icons = [
+        Icons.swipe_rounded,
+        Icons.delete_outline_rounded,
+        Icons.keyboard_arrow_down_rounded,
+        Icons.verified_user_outlined,
+        Icons.lock_outline_rounded,
+      ];
+      final accent = index == 1 ? _systemRed : _systemBlue;
+      return Container(
+        key: ValueKey('onboarding-motion-scene-${index + 1}'),
+        width: double.infinity,
+        height: 258,
+        constraints: const BoxConstraints(maxWidth: 320),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F7FA),
+          borderRadius: BorderRadius.circular(32),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (index == 0)
+              Transform.translate(
+                offset: Offset(46 * (1 - t), 0),
+                child: Opacity(
+                  opacity: 0.58 + 0.42 * t,
+                  child: _photoCard(alignment: Alignment.centerRight),
+                ),
+              ),
+            Transform.translate(
+              key: ValueKey('onboarding-motion-target-${index + 1}'),
+              offset: offset,
+              child: Transform.scale(
+                scale: index == 4 ? 0.82 + 0.18 * t : 1,
+                child: index == 4
+                    ? Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE5F2FF),
+                          borderRadius: BorderRadius.circular(26),
+                        ),
+                        child: const Icon(
+                          Icons.photo_library_outlined,
+                          color: _systemBlue,
+                          size: 40,
+                        ),
+                      )
+                    : Opacity(
+                        opacity: index == 1 ? 1 - 0.58 * t : 1,
+                        child: _photoCard(
+                          alignment: index == 0
+                              ? Alignment.centerLeft
+                              : Alignment.center,
+                        ),
+                      ),
+              ),
+            ),
+            if (index == 3)
+              Transform.scale(
+                scale: 0.7 + 0.3 * t,
+                child: Opacity(
+                  opacity: t,
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: _systemBlue,
+                    size: 62,
+                  ),
+                ),
+              ),
+            Positioned(
+              bottom: 14,
+              child: Opacity(
+                opacity: 0.35 + 0.65 * t,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xEFFFFFFF),
+                    borderRadius: BorderRadius.circular(99),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 14,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icons[index], color: accent, size: 18),
+                      const SizedBox(width: 7),
+                      Text(
+                        labels[index],
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
   Widget _tutorialPage(int index) => Semantics(
     label: _pageLabel(index),
     container: true,
     excludeSemantics: true,
     child: Padding(
       key: ValueKey('onboarding-page-${index + 1}'),
-      padding: const EdgeInsets.fromLTRB(28, 28, 28, 16),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 190,
-            height: 230,
-            decoration: BoxDecoration(
-              color: _secondarySystemBackground,
-              borderRadius: BorderRadius.circular(34),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 26,
-                  offset: Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 116,
-                  height: 142,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE5F2FF),
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Icon(pageIcons[index], color: _systemBlue, size: 52),
-                ),
-                if (index == 0) ...[
-                  const Positioned(
-                    left: 17,
-                    child: Icon(
-                      Icons.chevron_left_rounded,
-                      color: _secondaryLabel,
-                      size: 28,
-                    ),
-                  ),
-                  const Positioned(
-                    right: 17,
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      color: _secondaryLabel,
-                      size: 28,
-                    ),
-                  ),
-                ],
-                if (index == 1)
-                  const Positioned(
-                    top: 20,
-                    child: Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      color: _systemRed,
-                      size: 34,
-                    ),
-                  ),
-                if (index == 2)
-                  const Positioned(
-                    bottom: 17,
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: _systemBlue,
-                      size: 34,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 38),
+          _motionScene(index),
+          const SizedBox(height: 28),
           Text(
             pageTitles[index],
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: _primaryLabel,
-              fontSize: 30,
+              fontSize: 28,
               height: 1.1,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.7,
@@ -1365,17 +1475,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               height: 1.42,
             ),
           ),
-          if (index == 2) ...[
-            const SizedBox(height: 14),
-            Text(
-              '当前：${widget.downAction.label}',
-              style: const TextStyle(
-                color: _systemBlue,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ],
       ),
     ),
@@ -1384,6 +1483,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     playbackTimer?.cancel();
+    motionController.dispose();
     pager.dispose();
     super.dispose();
   }
@@ -1418,6 +1518,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     itemCount: pageTitles.length,
                     onPageChanged: (value) {
                       setState(() => page = value);
+                      _playMotion();
                       _schedulePlayback();
                     },
                     itemBuilder: (context, index) => _tutorialPage(index),
