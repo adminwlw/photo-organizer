@@ -1286,7 +1286,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   Widget _photoCard({
     Key? key,
-    String asset = 'assets/tutorial-portrait.png',
+    String asset = 'assets/tutorial-portrait.jpg',
     Alignment alignment = Alignment.center,
     double width = 142,
     double height = 170,
@@ -1486,7 +1486,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               0,
                             ),
                             child: Image.asset(
-                              'assets/tutorial-portrait.png',
+                              'assets/tutorial-portrait.jpg',
                               key: const ValueKey(
                                 'onboarding-browse-photo-top',
                               ),
@@ -1503,7 +1503,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               0,
                             ),
                             child: Image.asset(
-                              'assets/tutorial-landscape.png',
+                              'assets/tutorial-landscape.jpg',
                               fit: BoxFit.cover,
                               cacheWidth: 560,
                             ),
@@ -1520,7 +1520,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _tutorialThumb(
-                      'assets/tutorial-portrait.png',
+                      'assets/tutorial-portrait.jpg',
                       key: const ValueKey('onboarding-browse-photo-left'),
                       width: 46,
                       height: 34,
@@ -1528,14 +1528,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                     const SizedBox(width: 5),
                     _tutorialThumb(
-                      'assets/tutorial-landscape.png',
+                      'assets/tutorial-landscape.jpg',
                       width: 46,
                       height: 34,
                       selected: browseProgress >= 0.5,
                     ),
                     const SizedBox(width: 5),
                     _tutorialThumb(
-                      'assets/tutorial-still-life.png',
+                      'assets/tutorial-still-life.jpg',
                       key: const ValueKey('onboarding-browse-photo-right'),
                       width: 46,
                       height: 34,
@@ -1551,7 +1551,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   opacity: actionProgress,
                   child: _photoCard(
                     key: const ValueKey('onboarding-delete-next-photo'),
-                    asset: 'assets/tutorial-portrait.png',
+                    asset: 'assets/tutorial-portrait.jpg',
                   ),
                 ),
               ),
@@ -1613,7 +1613,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   scale: 1 - 0.82 * actionProgress,
                   child: Opacity(
                     opacity: 1 - actionProgress,
-                    child: _photoCard(asset: 'assets/tutorial-landscape.png'),
+                    child: _photoCard(asset: 'assets/tutorial-landscape.jpg'),
                   ),
                 ),
               ),
@@ -1682,12 +1682,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           crossAxisSpacing: 4,
                           children:
                               [
-                                    'assets/tutorial-portrait.png',
-                                    'assets/tutorial-landscape.png',
-                                    'assets/tutorial-still-life.png',
-                                    'assets/tutorial-landscape.png',
-                                    'assets/tutorial-still-life.png',
-                                    'assets/tutorial-portrait.png',
+                                    'assets/tutorial-portrait.jpg',
+                                    'assets/tutorial-landscape.jpg',
+                                    'assets/tutorial-still-life.jpg',
+                                    'assets/tutorial-landscape.jpg',
+                                    'assets/tutorial-still-life.jpg',
+                                    'assets/tutorial-portrait.jpg',
                                   ]
                                   .map(
                                     (asset) => ClipRRect(
@@ -1714,7 +1714,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   child: Opacity(
                     opacity: 1 - actionProgress,
                     child: _photoCard(
-                      asset: 'assets/tutorial-still-life.png',
+                      asset: 'assets/tutorial-still-life.jpg',
                       width: 124,
                       height: 148,
                     ),
@@ -1765,17 +1765,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         key: const ValueKey('onboarding-queue-grid'),
                         children: [
                           _queueThumb(
-                            'assets/tutorial-portrait.png',
+                            'assets/tutorial-portrait.jpg',
                             selected: actionProgress > 0.3,
                           ),
                           const SizedBox(width: 5),
                           _queueThumb(
-                            'assets/tutorial-landscape.png',
+                            'assets/tutorial-landscape.jpg',
                             selected: actionProgress > 0.45,
                           ),
                           const SizedBox(width: 5),
                           _queueThumb(
-                            'assets/tutorial-still-life.png',
+                            'assets/tutorial-still-life.jpg',
                             selected: actionProgress > 0.6,
                           ),
                         ],
@@ -1825,21 +1825,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _tutorialThumb(
-                            'assets/tutorial-portrait.png',
+                            'assets/tutorial-portrait.jpg',
                             key: const ValueKey(
                               'onboarding-permission-photo-1',
                             ),
                           ),
                           const SizedBox(width: 7),
                           _tutorialThumb(
-                            'assets/tutorial-landscape.png',
+                            'assets/tutorial-landscape.jpg',
                             key: const ValueKey(
                               'onboarding-permission-photo-2',
                             ),
                           ),
                           const SizedBox(width: 7),
                           _tutorialThumb(
-                            'assets/tutorial-still-life.png',
+                            'assets/tutorial-still-life.jpg',
                             key: const ValueKey(
                               'onboarding-permission-photo-3',
                             ),
@@ -2513,7 +2513,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Image.asset(
-                    'assets/home-hero-landscape.png',
+                    'assets/home-hero-landscape.jpg',
                     key: const Key('home-hero-landscape'),
                     fit: BoxFit.cover,
                     alignment: const Alignment(-0.25, -0.08),

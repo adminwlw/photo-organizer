@@ -64,10 +64,10 @@ flutter:
   assets:
     - assets/app-logo.png
     - assets/home-header-background.png
-    - assets/home-hero-landscape.png
-    - assets/tutorial-portrait.png
-    - assets/tutorial-landscape.png
-    - assets/tutorial-still-life.png
+    - assets/home-hero-landscape.jpg
+    - assets/tutorial-portrait.jpg
+    - assets/tutorial-landscape.jpg
+    - assets/tutorial-still-life.jpg
 
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package

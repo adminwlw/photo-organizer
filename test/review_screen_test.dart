@@ -810,9 +810,9 @@ void main() {
     expect(
       tutorialAssets,
       containsAll(const [
-        'assets/tutorial-portrait.png',
-        'assets/tutorial-landscape.png',
-        'assets/tutorial-still-life.png',
+        'assets/tutorial-portrait.jpg',
+        'assets/tutorial-landscape.jpg',
+        'assets/tutorial-still-life.jpg',
       ]),
     );
     expect(
