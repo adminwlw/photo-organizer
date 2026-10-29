@@ -129,7 +129,7 @@ void main() {
       PMDarwinAssetCollectionSubtype.smartAlbumScreenshots:
           SystemCategoryKind.screenshots,
       PMDarwinAssetCollectionSubtype.smartAlbumDepthEffect:
-          SystemCategoryKind.portraits,
+          SystemCategoryKind.depthEffect,
       PMDarwinAssetCollectionSubtype.smartAlbumLivePhotos:
           SystemCategoryKind.live,
       PMDarwinAssetCollectionSubtype.smartAlbumAnimated:
@@ -141,8 +141,6 @@ void main() {
           SystemCategoryKind.cinematic,
       PMDarwinAssetCollectionSubtype.smartAlbumSpatial:
           SystemCategoryKind.spatial,
-      PMDarwinAssetCollectionSubtype.smartAlbumProRes:
-          SystemCategoryKind.proRes,
       PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings:
           SystemCategoryKind.screenRecordings,
       PMDarwinAssetCollectionSubtype.smartAlbumReceipts:
@@ -160,6 +158,10 @@ void main() {
     }
     expect(
       iosSystemCategoryKind(PMDarwinAssetCollectionSubtype.smartAlbumAllHidden),
+      isNull,
+    );
+    expect(
+      iosSystemCategoryKind(PMDarwinAssetCollectionSubtype.smartAlbumProRes),
       isNull,
     );
     expect(

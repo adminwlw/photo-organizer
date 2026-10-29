@@ -58,13 +58,12 @@ enum SystemCategoryKind {
   screenshots,
   live,
   selfies,
-  portraits,
+  depthEffect,
   animated,
   longExposures,
   raw,
   cinematic,
   spatial,
-  proRes,
   screenRecordings,
   receipts,
   handwriting,
@@ -90,13 +89,12 @@ String systemCategoryLabel(
       SystemCategoryKind.screenshots => '截屏',
       SystemCategoryKind.live => '实况照片',
       SystemCategoryKind.selfies => '自拍',
-      SystemCategoryKind.portraits => '人像',
+      SystemCategoryKind.depthEffect => '景深效果',
       SystemCategoryKind.animated => '动图',
       SystemCategoryKind.longExposures => '长曝光',
       SystemCategoryKind.raw => 'RAW',
       SystemCategoryKind.cinematic => '电影效果',
       SystemCategoryKind.spatial => '空间',
-      SystemCategoryKind.proRes => 'ProRes',
       SystemCategoryKind.screenRecordings => '屏幕录制',
       SystemCategoryKind.receipts => '收据',
       SystemCategoryKind.handwriting => '手写内容',
@@ -117,13 +115,12 @@ String systemCategoryLabel(
     SystemCategoryKind.screenshots => 'Screenshots',
     SystemCategoryKind.live => 'Live Photos',
     SystemCategoryKind.selfies => 'Selfies',
-    SystemCategoryKind.portraits => 'Portrait',
+    SystemCategoryKind.depthEffect => 'Depth Effect',
     SystemCategoryKind.animated => 'Animated',
     SystemCategoryKind.longExposures => 'Long Exposure',
     SystemCategoryKind.raw => 'RAW',
     SystemCategoryKind.cinematic => 'Cinematic',
     SystemCategoryKind.spatial => 'Spatial',
-    SystemCategoryKind.proRes => 'ProRes',
     SystemCategoryKind.screenRecordings => 'Screen Recordings',
     SystemCategoryKind.receipts => 'Receipts',
     SystemCategoryKind.handwriting => 'Handwriting',
@@ -154,7 +151,7 @@ SystemCategoryKind? iosSystemCategoryKind(
   PMDarwinAssetCollectionSubtype.smartAlbumScreenshots =>
     SystemCategoryKind.screenshots,
   PMDarwinAssetCollectionSubtype.smartAlbumDepthEffect =>
-    SystemCategoryKind.portraits,
+    SystemCategoryKind.depthEffect,
   PMDarwinAssetCollectionSubtype.smartAlbumLivePhotos =>
     SystemCategoryKind.live,
   PMDarwinAssetCollectionSubtype.smartAlbumAnimated =>
@@ -166,7 +163,6 @@ SystemCategoryKind? iosSystemCategoryKind(
     SystemCategoryKind.cinematic,
   PMDarwinAssetCollectionSubtype.smartAlbumSpatial =>
     SystemCategoryKind.spatial,
-  PMDarwinAssetCollectionSubtype.smartAlbumProRes => SystemCategoryKind.proRes,
   PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings =>
     SystemCategoryKind.screenRecordings,
   PMDarwinAssetCollectionSubtype.smartAlbumReceipts =>
@@ -447,7 +443,8 @@ class MediaRepository {
     for (final path in paths.where((path) => path.albumType == 1)) {
       final subtype = path.albumTypeEx?.darwin?.subtype;
       if (subtype == PMDarwinAssetCollectionSubtype.smartAlbumAllHidden ||
-          subtype == PMDarwinAssetCollectionSubtype.smartAlbumUnableToUpload) {
+          subtype == PMDarwinAssetCollectionSubtype.smartAlbumUnableToUpload ||
+          subtype == PMDarwinAssetCollectionSubtype.smartAlbumProRes) {
         continue;
       }
       final count = await path.assetCountAsync;
@@ -507,10 +504,13 @@ class MediaRepository {
   ) async {
     final total = await path.assetCountAsync;
     final records = <MediaRecord>[];
+    final seen = <String>{};
     for (var page = 0; records.length < total; page++) {
       final assets = await path.getAssetListPaged(page: page, size: 200);
       if (assets.isEmpty) break;
-      records.addAll(assets.map(_recordFromAsset));
+      records.addAll(
+        assets.where((asset) => seen.add(asset.id)).map(_recordFromAsset),
+      );
       onProgress(records.length, total);
       if (assets.length < 200) break;
     }

@@ -119,6 +119,27 @@ class AlbumsMediaRepository extends FakeMediaRepository {
   ];
 }
 
+class QueuedAlbumsMediaRepository extends FakeMediaRepository {
+  @override
+  Future<List<SystemAlbumSummary>> systemAlbums() async => [
+    SystemAlbumSummary(
+      path: AssetPathEntity(id: 'camera', name: 'Camera'),
+      count: 2,
+      coverId: photo.id,
+      group: SystemAlbumGroup.album,
+    ),
+  ];
+
+  @override
+  Future<List<MediaRecord>> recordsForAlbum(
+    AssetPathEntity path,
+    void Function(int, int) onProgress,
+  ) async {
+    onProgress(2, 2);
+    return const [photo, livePhoto];
+  }
+}
+
 class SimilarMediaRepository extends FakeMediaRepository {
   @override
   Future<int> cachedSimilarPhotoCount(AppStore store) async => 2;
@@ -317,6 +338,17 @@ class ScopeAppStore extends UndoAppStore {
     bool pendingOnly = false,
     bool unreviewedOnly = false,
   }) async => items.indexWhere((item) => item.id == mediaId);
+}
+
+class QueuedScopeAppStore extends ScopeAppStore {
+  QueuedScopeAppStore(super.db, this.queuedIds);
+
+  final List<String> queuedIds;
+
+  @override
+  Future<List<Map<String, Object?>>> queue() async => queuedIds
+      .map((id) => <String, Object?>{'media_id': id, 'status': 'queued'})
+      .toList();
 }
 
 class StartupAppStore extends ScopeAppStore {
@@ -1074,6 +1106,34 @@ void main() {
     expect(find.byKey(const Key('video-sound-toggle')), findsOneWidget);
     expect(find.byTooltip('开启声音'), findsOneWidget);
     expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
+  });
+
+  testWidgets('a hardware volume event enables sound for the active video', (
+    tester,
+  ) async {
+    final volumeEvents = StreamController<void>.broadcast();
+    addTearDown(volumeEvents.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MediaView(
+            FakeMediaRepository(),
+            video,
+            autoplay: true,
+            volumeButtonEvents: volumeEvents.stream,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byTooltip('开启声音'), findsOneWidget);
+
+    volumeEvents.add(null);
+    await tester.pump();
+
+    expect(find.byTooltip('关闭声音'), findsOneWidget);
+    expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
   });
 
   testWidgets('a live photo requests its motion clip while held', (
@@ -2713,6 +2773,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('library-albums-view')), findsOneWidget);
     expect(find.text('Camera'), findsOneWidget);
+    expect(find.text('按相册浏览'), findsOneWidget);
+    final toggleRect = tester.getRect(
+      find.byKey(const Key('library-view-toggle')),
+    );
+    expect(
+      toggleRect.center.dx,
+      moreOrLessEquals(
+        tester.view.physicalSize.width / tester.view.devicePixelRatio / 2,
+        epsilon: 0.1,
+      ),
+    );
+    final albumCover = tester.getRect(
+      find.byKey(const ValueKey('library-album-cover-camera')),
+    );
+    expect(albumCover.width, moreOrLessEquals(albumCover.height, epsilon: 0.1));
+    final albumGrid = tester.widget<GridView>(
+      find.byKey(const ValueKey('library-album-grid-手机相册')),
+    );
+    expect(albumGrid.padding, EdgeInsets.zero);
+  });
+
+  testWidgets('album list counts only media not already queued for deletion', (
+    tester,
+  ) async {
+    final app = CleanerState(
+      QueuedScopeAppStore(database, const ['live-photo']),
+      QueuedAlbumsMediaRepository(),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Camera'), findsOneWidget);
+    expect(find.text('1 项'), findsOneWidget);
+    expect(find.text('2 项'), findsNothing);
   });
 
   testWidgets('video thumbnails show duration at the bottom-right', (

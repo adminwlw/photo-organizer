@@ -23,6 +23,12 @@ const _separator = Color(0x1F3C3C43);
 const _appleGlass = Color(0x4DFFFFFF);
 const _appleGlassBorder = Color(0x99FFFFFF);
 const _appleGlassForeground = Color(0xE61C1C1E);
+const _hardwareVolumeChannel = EventChannel(
+  'com.sim360.albumcleaner/hardware_volume',
+);
+final Stream<void> _hardwareVolumeButtonEvents = _hardwareVolumeChannel
+    .receiveBroadcastStream()
+    .map((_) {});
 
 enum DownSwipeAction { none, pending, returnToAlbum }
 
@@ -105,6 +111,77 @@ int _albumGridColumnCount(double logicalWidth) {
     2,
     4,
   );
+}
+
+Future<Set<String>> _queuedMediaIds(AppStore store) async =>
+    (await store.queue()).map((row) => row['media_id'] as String).toSet();
+
+Future<List<MediaRecord>> _visibleAlbumRecords(
+  MediaRepository media,
+  AssetPathEntity path,
+  Set<String> excludedIds,
+) async {
+  final records = await media.recordsForAlbum(path, (_, _) {});
+  final visible = <String, MediaRecord>{};
+  for (final record in records) {
+    if (!excludedIds.contains(record.id)) {
+      visible.putIfAbsent(record.id, () => record);
+    }
+  }
+  return visible.values.toList();
+}
+
+Future<List<SystemAlbumSummary>> _loadVisibleSystemAlbums(
+  CleanerState app,
+) async {
+  final summaries = await app.media.systemAlbums();
+  final excludedIds = await _queuedMediaIds(app.store);
+  if (excludedIds.isEmpty) return summaries;
+  final result = <SystemAlbumSummary>[];
+  for (final summary in summaries) {
+    final visible = await _visibleAlbumRecords(
+      app.media,
+      summary.path,
+      excludedIds,
+    );
+    if (visible.isEmpty) continue;
+    result.add(
+      SystemAlbumSummary(
+        path: summary.path,
+        count: visible.length,
+        coverId: visible.first.id,
+        group: summary.group,
+      ),
+    );
+  }
+  return result;
+}
+
+Future<List<SystemCategorySummary>> _loadVisibleSystemCategories(
+  CleanerState app,
+) async {
+  final summaries = await app.media.systemCategories();
+  final excludedIds = await _queuedMediaIds(app.store);
+  if (excludedIds.isEmpty) return summaries;
+  final result = <SystemCategorySummary>[];
+  for (final summary in summaries) {
+    final visible = await _visibleAlbumRecords(
+      app.media,
+      summary.path,
+      excludedIds,
+    );
+    if (visible.isEmpty) continue;
+    result.add(
+      SystemCategorySummary(
+        kind: summary.kind,
+        label: summary.label,
+        path: summary.path,
+        count: visible.length,
+        coverId: visible.first.id,
+      ),
+    );
+  }
+  return result;
 }
 
 double _floatingHeaderInset(BuildContext context) =>
@@ -2220,19 +2297,19 @@ class _HomeScreenState extends State<HomeScreen> {
     allMediaCover = _loadAllMediaCover();
     localCategoryCounts = _loadLocalCategoryCounts();
     similarPhotoCount = _loadSimilarPhotoCount();
-    if (systemAlbums != null) systemAlbums = app.media.systemAlbums();
-    if (Platform.isIOS) systemCategories = app.media.systemCategories();
+    if (systemAlbums != null) systemAlbums = _loadVisibleSystemAlbums(app);
+    if (Platform.isIOS) systemCategories = _loadVisibleSystemCategories(app);
   }
 
   Future<List<SystemCategorySummary>>
   _loadSystemCategoriesAfterFirstFrame() async {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return const [];
-    return app.media.systemCategories();
+    return _loadVisibleSystemCategories(app);
   }
 
   void _ensureAlbumsLoaded() {
-    systemAlbums ??= app.media.systemAlbums();
+    systemAlbums ??= _loadVisibleSystemAlbums(app);
   }
 
   Future<List<MediaRecord>> _loadAllMediaCover() async => (await Future.wait([
@@ -2252,7 +2329,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     if (mounted) {
-      setState(() => allMediaCover = _loadAllMediaCover());
+      setState(() {
+        allMediaCover = _loadAllMediaCover();
+        if (systemAlbums != null) systemAlbums = _loadVisibleSystemAlbums(app);
+        if (Platform.isIOS) {
+          systemCategories = _loadVisibleSystemCategories(app);
+        }
+      });
     }
   }
 
@@ -2674,13 +2757,12 @@ class _HomeScreenState extends State<HomeScreen> {
     SystemCategoryKind.screenshots => Icons.screenshot_outlined,
     SystemCategoryKind.live => Icons.motion_photos_on_outlined,
     SystemCategoryKind.selfies => Icons.face_outlined,
-    SystemCategoryKind.portraits => Icons.portrait_outlined,
+    SystemCategoryKind.depthEffect => Icons.blur_on_rounded,
     SystemCategoryKind.animated => Icons.animation_rounded,
     SystemCategoryKind.longExposures => Icons.shutter_speed_rounded,
     SystemCategoryKind.raw => Icons.raw_on_outlined,
     SystemCategoryKind.cinematic => Icons.movie_filter_outlined,
     SystemCategoryKind.spatial => Icons.view_in_ar_outlined,
-    SystemCategoryKind.proRes => Icons.high_quality_outlined,
     SystemCategoryKind.screenRecordings => Icons.screen_share_outlined,
     SystemCategoryKind.receipts => Icons.receipt_long_outlined,
     SystemCategoryKind.handwriting => Icons.draw_outlined,
@@ -5094,7 +5176,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
         child: libraryMenuExpanded || showingAlbums
             ? Align(
                 key: const Key('library-view-toggle'),
-                alignment: Alignment.bottomLeft,
+                alignment: Alignment.bottomCenter,
                 child: SizedBox(
                   width: 220,
                   child: _LibraryGlassControl(
@@ -5175,8 +5257,12 @@ class _ScopeScreenState extends State<ScopeScreen> {
     extendBody: true,
     extendBodyBehindAppBar: true,
     appBar: _MediaGradientAppBar(
-      title: widget.scope.label,
-      subtitle: selecting ? '已选择 ${selected.length} 项' : '$count 个项目',
+      title: showingAlbums ? '相册' : widget.scope.label,
+      subtitle: showingAlbums
+          ? '按相册浏览'
+          : selecting
+          ? '已选择 ${selected.length} 项'
+          : '$count 个项目',
       actions: [
         if (!showingAlbums && libraryTimeMode == _LibraryTimeMode.all)
           if (!selecting)
@@ -5389,12 +5475,20 @@ class _LibraryAlbumsView extends StatefulWidget {
 }
 
 class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
-  late final Future<List<SystemAlbumSummary>> albums;
+  late Future<List<SystemAlbumSummary>> albums;
 
   @override
   void initState() {
     super.initState();
-    albums = widget.app.media.systemAlbums();
+    albums = _loadVisibleSystemAlbums(widget.app);
+  }
+
+  Future<void> _openAlbum(SystemAlbumSummary album) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SystemAlbumScreen(widget.app, album)),
+    );
+    if (mounted) setState(() => albums = _loadVisibleSystemAlbums(widget.app));
   }
 
   Widget _section(String title, List<SystemAlbumSummary> items) {
@@ -5403,13 +5497,15 @@ class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(0, 22, 0, 12),
+          padding: const EdgeInsets.fromLTRB(0, 18, 0, 12),
           child: Text(
             title,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
           ),
         ),
         GridView.builder(
+          key: ValueKey('library-album-grid-$title'),
+          padding: EdgeInsets.zero,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: items.length,
@@ -5419,24 +5515,21 @@ class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
             ),
             crossAxisSpacing: 12,
             mainAxisSpacing: 16,
-            childAspectRatio: 0.88,
+            childAspectRatio: 0.78,
           ),
           itemBuilder: (context, index) {
             final album = items[index];
             return InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SystemAlbumScreen(widget.app, album),
-                ),
-              ),
+              onTap: () => _openAlbum(album),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
+                  AspectRatio(
+                    aspectRatio: 1,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(22),
+                      key: ValueKey('library-album-cover-${album.path.id}'),
+                      borderRadius: BorderRadius.circular(12),
                       child: album.coverId == null
                           ? const ColoredBox(
                               color: Color(0xFFEAF0FF),
@@ -5481,7 +5574,7 @@ class _LibraryAlbumsViewState extends State<_LibraryAlbumsView> {
       if (items.isEmpty) return const Center(child: Text('还没有可浏览的相册'));
       return ListView(
         key: const Key('library-albums-view'),
-        padding: EdgeInsets.fromLTRB(20, widget.topPadding, 20, 116),
+        padding: EdgeInsets.fromLTRB(20, widget.topPadding + 4, 20, 116),
         children: [
           _section(
             '手机相册',
@@ -6847,6 +6940,7 @@ class MediaView extends StatefulWidget {
     this.autoplay = true,
     this.videoProgressBottom = 10,
     this.controlsVisible = true,
+    this.volumeButtonEvents,
   });
   final MediaRepository media;
   final MediaRecord item;
@@ -6854,6 +6948,7 @@ class MediaView extends StatefulWidget {
   final bool autoplay;
   final double videoProgressBottom;
   final bool controlsVisible;
+  final Stream<void>? volumeButtonEvents;
 
   @override
   State<MediaView> createState() => _MediaViewState();
@@ -6866,6 +6961,7 @@ class _MediaViewState extends State<MediaView> {
   bool livePhotoPressed = false;
   bool livePhotoPlaying = false;
   bool videoCompleted = false;
+  StreamSubscription<void>? volumeButtonSubscription;
 
   bool get canPlayLivePhoto =>
       widget.item.live && widget.media.supportsLivePhotoPlayback;
@@ -6873,6 +6969,7 @@ class _MediaViewState extends State<MediaView> {
   @override
   void initState() {
     super.initState();
+    _listenForHardwareVolume();
     if (widget.item.type == 2 && widget.autoplay) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _play());
     }
@@ -6880,9 +6977,27 @@ class _MediaViewState extends State<MediaView> {
 
   @override
   void dispose() {
+    unawaited(volumeButtonSubscription?.cancel());
     player?.removeListener(_handlePlayback);
     player?.dispose();
     super.dispose();
+  }
+
+  void _listenForHardwareVolume() {
+    if (widget.item.type != 2 || !widget.autoplay) return;
+    final events = widget.volumeButtonEvents;
+    if (events == null && !Platform.isAndroid && !Platform.isIOS) return;
+    volumeButtonSubscription = (events ?? _hardwareVolumeButtonEvents).listen(
+      (_) => unawaited(_enableSoundFromHardwareVolume()),
+    );
+  }
+
+  Future<void> _enableSoundFromHardwareVolume() async {
+    if (!muted) return;
+    muted = false;
+    if (mounted) setState(() {});
+    final controller = player;
+    if (controller?.value.isInitialized == true) await controller!.setVolume(1);
   }
 
   void _handlePlayback() {
