@@ -972,12 +972,19 @@ void main() {
                 .decoration
             as BoxDecoration;
     final gradient = topGradient.gradient! as LinearGradient;
-    expect(gradient.colors, const [
-      Color(0x2EFFFFFF),
-      Color(0x12FFFFFF),
-      Color(0x00FFFFFF),
-    ]);
-    expect(gradient.stops, const [0, 0.62, 1]);
+    expect(gradient.colors, const [Color(0x99FFFFFF), Color(0x00FFFFFF)]);
+    expect(gradient.stops, const [0, 1]);
+    expect(
+      tester
+          .widget<FractionallySizedBox>(
+            find.descendant(
+              of: find.byKey(const Key('page-top-gradient')),
+              matching: find.byType(FractionallySizedBox),
+            ),
+          )
+          .heightFactor,
+      1,
+    );
     expect(
       find.descendant(
         of: find.byKey(const Key('page-top-gradient')),
@@ -3113,6 +3120,39 @@ void main() {
   );
 
   testWidgets(
+    'review media reserves space between header and filmstrip controls',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReviewScreen(
+            CleanerState(FakeAppStore(database), FakeMediaRepository()),
+            Scope.all,
+            source: const [photo, nextPhoto],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MediaView), findsOneWidget);
+      final mediaPadding =
+          tester
+                  .widgetList<Padding>(
+                    find.descendant(
+                      of: find.byType(MediaView),
+                      matching: find.byType(Padding),
+                    ),
+                  )
+                  .single
+                  .padding
+              as EdgeInsets;
+      expect(mediaPadding.top, greaterThanOrEqualTo(60));
+      expect(mediaPadding.bottom, greaterThanOrEqualTo(120));
+    },
+  );
+
+  testWidgets(
     'filmstrip center follows scrolling with compact zero-gap tiles',
     (tester) async {
       await tester.pumpWidget(
@@ -3292,6 +3332,19 @@ void main() {
       expect(find.text('左右滑动浏览 · 下滑返回'), findsOneWidget);
       expect(find.text('保留此项'), findsOneWidget);
       expect(find.text('删除此项'), findsOneWidget);
+      final mediaPadding =
+          tester
+                  .widgetList<Padding>(
+                    find.descendant(
+                      of: find.byType(MediaView),
+                      matching: find.byType(Padding),
+                    ),
+                  )
+                  .single
+                  .padding
+              as EdgeInsets;
+      expect(mediaPadding.top, greaterThanOrEqualTo(60));
+      expect(mediaPadding.bottom, greaterThanOrEqualTo(120));
 
       await tester.drag(
         find.byKey(const Key('queue-preview-surface')),

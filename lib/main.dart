@@ -190,6 +190,11 @@ double _appHeaderInset(BuildContext context) =>
 const _immersiveHeaderHeight = 88.0;
 const _immersiveHeaderPadding = EdgeInsets.fromLTRB(14, 8, 14, 14);
 
+EdgeInsets _immersiveMediaPadding(BuildContext context) {
+  final safeArea = MediaQuery.paddingOf(context);
+  return EdgeInsets.fromLTRB(16, safeArea.top + 64, 16, safeArea.bottom + 128);
+}
+
 class _SystemTopGradient extends StatelessWidget {
   const _SystemTopGradient({super.key});
 
@@ -204,7 +209,7 @@ class _SystemTopGradient extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: FractionallySizedBox(
           widthFactor: 1,
-          heightFactor: 0.76,
+          heightFactor: 1,
           child: ClipRect(
             child: BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -213,12 +218,8 @@ class _SystemTopGradient extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0x2EFFFFFF),
-                      Color(0x12FFFFFF),
-                      Color(0x00FFFFFF),
-                    ],
-                    stops: [0, 0.62, 1],
+                    colors: [Color(0x99FFFFFF), Color(0x00FFFFFF)],
+                    stops: [0, 1],
                   ),
                 ),
               ),
@@ -6592,6 +6593,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                   autoplay: false,
                   previewBytes: incomingPreview,
                   controlsVisible: false,
+                  contentPadding: _immersiveMediaPadding(context),
                 ),
               ),
             Transform.translate(
@@ -6607,6 +6609,7 @@ class _ReviewScreenState extends State<ReviewScreen>
                   previewBytes: currentPreview,
                   controlsVisible: zoom <= 1.001,
                   videoProgressBottom: 142,
+                  contentPadding: _immersiveMediaPadding(context),
                 ),
               ),
             ),
@@ -6997,6 +7000,7 @@ class MediaView extends StatefulWidget {
     this.videoProgressBottom = 10,
     this.controlsVisible = true,
     this.volumeButtonEvents,
+    this.contentPadding = const EdgeInsets.all(16),
   });
   final MediaRepository media;
   final MediaRecord item;
@@ -7005,6 +7009,7 @@ class MediaView extends StatefulWidget {
   final double videoProgressBottom;
   final bool controlsVisible;
   final Stream<void>? volumeButtonEvents;
+  final EdgeInsets contentPadding;
 
   @override
   State<MediaView> createState() => _MediaViewState();
@@ -7272,7 +7277,7 @@ class _MediaViewState extends State<MediaView> {
         fit: StackFit.expand,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: widget.contentPadding,
             child: Center(
               child: DecoratedBox(
                 key: const Key('media-surface-shadow'),
@@ -8167,6 +8172,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
             autoplay: autoplay,
             controlsVisible: !zoomed,
             videoProgressBottom: 142,
+            contentPadding: _immersiveMediaPadding(context),
           );
         },
       );
