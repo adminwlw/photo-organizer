@@ -184,11 +184,11 @@ Future<List<SystemCategorySummary>> _loadVisibleSystemCategories(
   return result;
 }
 
-double _floatingHeaderInset(BuildContext context) =>
-    MediaQuery.paddingOf(context).top + 52;
-
-double _mediaHeaderInset(BuildContext context) =>
+double _appHeaderInset(BuildContext context) =>
     MediaQuery.paddingOf(context).top + 60;
+
+const _immersiveHeaderHeight = 88.0;
+const _immersiveHeaderPadding = EdgeInsets.fromLTRB(14, 8, 14, 14);
 
 class _SystemTopGradient extends StatelessWidget {
   const _SystemTopGradient({super.key});
@@ -546,69 +546,11 @@ class _SelectedNavIcon extends StatelessWidget {
   );
 }
 
-class _FloatingGlassAppBar extends StatelessWidget
-    implements PreferredSizeWidget {
-  const _FloatingGlassAppBar({required this.title, this.actions});
-
-  final Widget title;
-  final List<Widget>? actions;
-
-  @override
-  Size get preferredSize => const Size.fromHeight(52);
-
-  @override
-  Widget build(BuildContext context) => AppBar(
-    primary: true,
-    toolbarHeight: 52,
-    automaticallyImplyLeading: false,
-    forceMaterialTransparency: true,
-    backgroundColor: Colors.transparent,
-    foregroundColor: _appleGlassForeground,
-    surfaceTintColor: Colors.transparent,
-    elevation: 0,
-    scrolledUnderElevation: 0,
-    titleTextStyle: const TextStyle(
-      color: _appleGlassForeground,
-      fontSize: 17,
-      fontWeight: FontWeight.w600,
-    ),
-    systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
-      statusBarColor: Colors.transparent,
-      systemStatusBarContrastEnforced: false,
-    ),
-    flexibleSpace: const _SystemTopGradient(
-      key: Key('floating-header-gradient'),
-    ),
-    leadingWidth: 58,
-    leading: Navigator.canPop(context)
-        ? Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: Center(
-              child: _GlassIconButton(
-                tooltip: '返回',
-                icon: Icons.arrow_back_ios_new_rounded,
-                onPressed: () => Navigator.maybePop(context),
-                diameter: 38,
-                iconSize: 18,
-              ),
-            ),
-          )
-        : null,
-    title: title,
-    actions: actions,
-  );
-}
-
-class _MediaGradientAppBar extends StatelessWidget
-    implements PreferredSizeWidget {
-  const _MediaGradientAppBar({
-    required this.title,
-    required this.subtitle,
-    this.actions,
-  });
+class _UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _UnifiedAppBar({required this.title, this.subtitle, this.actions});
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final List<Widget>? actions;
 
   @override
@@ -629,22 +571,29 @@ class _MediaGradientAppBar extends StatelessWidget
       statusBarColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
     ),
-    flexibleSpace: const _SystemTopGradient(key: Key('media-header-gradient')),
-    leadingWidth: 52,
-    leading: Padding(
-      padding: const EdgeInsets.only(left: 8),
-      child: Center(
-        child: _GlassIconButton(
-          key: const Key('media-header-back'),
-          tooltip: '返回',
-          icon: Icons.arrow_back_ios_new_rounded,
-          onPressed: () => Navigator.maybePop(context),
-          diameter: 38,
-          iconSize: 18,
-        ),
-      ),
+    titleTextStyle: const TextStyle(
+      color: _appleGlassForeground,
+      fontSize: 17,
+      fontWeight: FontWeight.w600,
     ),
-    titleSpacing: 0,
+    flexibleSpace: const _SystemTopGradient(key: Key('media-header-gradient')),
+    leadingWidth: 58,
+    leading: Navigator.canPop(context)
+        ? Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Center(
+              child: _GlassIconButton(
+                key: const Key('media-header-back'),
+                tooltip: '返回',
+                icon: Icons.arrow_back_ios_new_rounded,
+                onPressed: () => Navigator.maybePop(context),
+                diameter: 44,
+                iconSize: 19,
+              ),
+            ),
+          )
+        : null,
+    titleSpacing: Navigator.canPop(context) ? 0 : 16,
     title: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,17 +609,19 @@ class _MediaGradientAppBar extends StatelessWidget
             height: 1.12,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: _secondaryLabel,
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
+        if (subtitle case final subtitle?) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _secondaryLabel,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+            ),
           ),
-        ),
+        ],
       ],
     ),
     actions: actions,
@@ -696,7 +647,7 @@ class _HeaderSelectButton extends StatelessWidget {
             foregroundColor: _appleGlassForeground,
             disabledForegroundColor: const Color(0x663C3C43),
             backgroundColor: Colors.transparent,
-            minimumSize: const Size(62, 36),
+            minimumSize: const Size(62, 44),
             padding: const EdgeInsets.symmetric(horizontal: 14),
           ),
           child: Text(selecting ? '取消' : '选择'),
@@ -719,7 +670,7 @@ class _HeaderBrowseButton extends StatelessWidget {
         tooltip: '左右滑动浏览',
         icon: Icons.swipe_rounded,
         onPressed: onPressed,
-        diameter: 38,
+        diameter: 44,
         iconSize: 20,
       ),
     ),
@@ -2057,7 +2008,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     backgroundColor: _systemBackground,
     extendBodyBehindAppBar: Navigator.canPop(context),
     appBar: Navigator.canPop(context)
-        ? const _FloatingGlassAppBar(title: Text('使用教程'))
+        ? const _UnifiedAppBar(title: '使用教程')
         : null,
     body: Stack(
       fit: StackFit.expand,
@@ -2072,7 +2023,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         SafeArea(
           child: Padding(
-            padding: EdgeInsets.only(top: Navigator.canPop(context) ? 52 : 0),
+            padding: EdgeInsets.only(top: Navigator.canPop(context) ? 60 : 0),
             child: Column(
               children: [
                 Padding(
@@ -2190,10 +2141,10 @@ class PermissionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBodyBehindAppBar: true,
-    appBar: const _FloatingGlassAppBar(title: Text('照片访问权限')),
+    appBar: const _UnifiedAppBar(title: '照片访问权限'),
     body: SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 52, 28, 28),
+        padding: const EdgeInsets.fromLTRB(28, 60, 28, 28),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2265,7 +2216,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<SystemCategorySummary>> systemCategories;
   late Future<List<MediaRecord>> allMediaCover;
   late Future<List<int>> localCategoryCounts;
-  late Future<int> similarPhotoCount;
+  late Future<SimilarPhotoStatus> similarPhotoStatus;
   late int observedScanRevision;
   MediaStorageSummary? storage;
   bool storageLoading = false;
@@ -2284,7 +2235,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : Future.value(const []);
     allMediaCover = _loadAllMediaCover();
     localCategoryCounts = _loadLocalCategoryCounts();
-    similarPhotoCount = _loadSimilarPhotoCount();
+    similarPhotoStatus = _loadSimilarPhotoStatus();
   }
 
   @override
@@ -2296,7 +2247,7 @@ class _HomeScreenState extends State<HomeScreen> {
     storage = null;
     allMediaCover = _loadAllMediaCover();
     localCategoryCounts = _loadLocalCategoryCounts();
-    similarPhotoCount = _loadSimilarPhotoCount();
+    similarPhotoStatus = _loadSimilarPhotoStatus();
     if (systemAlbums != null) systemAlbums = _loadVisibleSystemAlbums(app);
     if (Platform.isIOS) systemCategories = _loadVisibleSystemCategories(app);
   }
@@ -2323,14 +2274,15 @@ class _HomeScreenState extends State<HomeScreen> {
     app.store.count(Scope.live),
   ]);
 
-  Future<int> _loadSimilarPhotoCount() =>
-      app.media.cachedSimilarPhotoCount(app.store);
+  Future<SimilarPhotoStatus> _loadSimilarPhotoStatus() =>
+      app.media.cachedSimilarPhotoStatus(app.store);
 
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     if (mounted) {
       setState(() {
         allMediaCover = _loadAllMediaCover();
+        similarPhotoStatus = _loadSimilarPhotoStatus();
         if (systemAlbums != null) systemAlbums = _loadVisibleSystemAlbums(app);
         if (Platform.isIOS) {
           systemCategories = _loadVisibleSystemCategories(app);
@@ -2412,22 +2364,24 @@ class _HomeScreenState extends State<HomeScreen> {
     key: const Key('home-brand'),
     children: [
       ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(11),
         child: Image.asset(
           'assets/app-logo.png',
           key: const Key('home-brand-logo'),
-          width: 46,
-          height: 46,
+          width: 40,
+          height: 40,
         ),
       ),
-      const SizedBox(width: 11),
+      const SizedBox(width: 10),
       const Expanded(
         child: Text(
           '相册删除',
           style: TextStyle(
-            color: Color(0xFF111A35),
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
+            color: _primaryLabel,
+            fontSize: 34,
+            height: 1.08,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.8,
           ),
         ),
       ),
@@ -2436,8 +2390,8 @@ class _HomeScreenState extends State<HomeScreen> {
         tooltip: '使用教程',
         icon: Icons.help_outline_rounded,
         foregroundColor: _systemBlue,
-        diameter: 48,
-        iconSize: 27,
+        diameter: 44,
+        iconSize: 24,
         onPressed: () => _open(
           OnboardingScreen(
             downAction: app.downAction,
@@ -3045,16 +2999,29 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _similarCategoryTile() => FutureBuilder<int>(
-    future: similarPhotoCount,
-    builder: (context, snapshot) => _compactCategoryTile(
-      key: const ValueKey('category-similar'),
-      icon: Icons.auto_awesome_mosaic_outlined,
-      label: '相似照片',
-      count: snapshot.data,
-      accent: const Color(0xFF119C9A),
-      onTap: () => _open(SimilarPhotosScreen(app)),
-    ),
+  Widget _similarCategoryTile() => FutureBuilder<SimilarPhotoStatus>(
+    future: similarPhotoStatus,
+    builder: (context, snapshot) {
+      final status = snapshot.data;
+      final countText = status == null
+          ? '读取中'
+          : !status.hasAnalysis
+          ? '点击分析'
+          : status.needsUpdate
+          ? '可更新'
+          : status.photoCount == 0
+          ? '未发现'
+          : '${status.groupCount} 组 · ${status.photoCount} 张';
+      return _compactCategoryTile(
+        key: const ValueKey('category-similar'),
+        icon: Icons.auto_awesome_mosaic_outlined,
+        label: '相似照片',
+        count: status?.photoCount,
+        countText: countText,
+        accent: const Color(0xFF119C9A),
+        onTap: () => _open(SimilarPhotosScreen(app)),
+      );
+    },
   );
 
   Widget _compactCategoryList(List<Widget> children) {
@@ -3141,15 +3108,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: Column(
-          children: [
-            _brandHeader(),
-            const SizedBox(height: 12),
-            _heroIntro(),
-            const SizedBox(height: 4),
-            _reviewHero(),
-          ],
+          children: [_heroIntro(), const SizedBox(height: 4), _reviewHero()],
         ),
       ),
     ],
@@ -3157,8 +3118,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _home() => ListView(
     key: const Key('home-scroll'),
-    padding: const EdgeInsets.only(bottom: 112),
+    padding: const EdgeInsets.only(top: 4, bottom: 112),
     children: [
+      Padding(
+        key: const Key('home-root-header'),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: _brandHeader(),
+      ),
       _homeHeader(),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -4068,7 +4034,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
     extendBodyBehindAppBar: true,
-    appBar: _MediaGradientAppBar(
+    appBar: _UnifiedAppBar(
       title: title,
       subtitle: selecting
           ? '已选择 ${selected.length} 项'
@@ -4108,7 +4074,7 @@ class _SystemAlbumScreenState extends State<SystemAlbumScreen> {
             controller: gridController,
             padding: EdgeInsets.fromLTRB(
               4,
-              _mediaHeaderInset(context) + 6,
+              _appHeaderInset(context) + 6,
               4,
               82,
             ),
@@ -4196,6 +4162,8 @@ class SimilarPhotosScreen extends StatefulWidget {
   State<SimilarPhotosScreen> createState() => _SimilarPhotosScreenState();
 }
 
+enum _SimilarityAction { checkUpdates, rebuild }
+
 class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   List<SimilarPhotoGroup>? groups;
   int processed = 0;
@@ -4213,7 +4181,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     final token = ++loadToken;
     setState(() {
       failed = false;
@@ -4224,17 +4192,23 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
       total = 0;
     });
     try {
-      final cached = await widget.app.media.cachedSimilarPhotos(
+      final status = await widget.app.media.cachedSimilarPhotoStatus(
         widget.app.store,
       );
-      final cachedAt = await widget.app.media.cachedSimilarityGeneratedAt(
-        widget.app.store,
-      );
+      final cached = status.hasAnalysis
+          ? await widget.app.media.cachedSimilarPhotos(widget.app.store)
+          : null;
       if (mounted && token == loadToken && cached != null) {
         setState(() {
           groups = cached;
-          generatedAt = cachedAt;
+          generatedAt = status.generatedAt;
         });
+      }
+      if (!force && status.hasAnalysis && !status.needsUpdate) {
+        if (mounted && token == loadToken) {
+          setState(() => refreshing = false);
+        }
+        return;
       }
       final result = await widget.app.media.findSimilarPhotos(
         widget.app.store,
@@ -4277,6 +4251,49 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   void _cancel() {
     if (!refreshing || cancelRequested) return;
     setState(() => cancelRequested = true);
+  }
+
+  Future<void> _rebuildAnalysis() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重新分析全部照片？'),
+        content: const Text('这会清除现有分析缓存并重新检查全部照片，照片较多时可能需要较长时间。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('重新分析'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.app.store.clearSimilarityAnalysis();
+      if (!mounted) return;
+      setState(() {
+        groups = null;
+        generatedAt = null;
+      });
+      await _load(force: true);
+    } catch (_) {
+      if (mounted) setState(() => failed = true);
+    }
+  }
+
+  void _selectAction(_SimilarityAction action) {
+    switch (action) {
+      case _SimilarityAction.checkUpdates:
+        unawaited(_load(force: true));
+        break;
+      case _SimilarityAction.rebuild:
+        unawaited(_rebuildAnalysis());
+        break;
+    }
   }
 
   @override
@@ -4328,9 +4345,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
     return CustomScrollView(
       key: const Key('similar-groups'),
       slivers: [
-        SliverToBoxAdapter(
-          child: SizedBox(height: _floatingHeaderInset(context)),
-        ),
+        SliverToBoxAdapter(child: SizedBox(height: _appHeaderInset(context))),
         if (generatedAt != null)
           SliverToBoxAdapter(
             child: Padding(
@@ -4377,7 +4392,10 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
               child: Row(
                 children: [
                   const Expanded(child: Text('分析已停止，当前显示上次结果')),
-                  TextButton(onPressed: _load, child: const Text('重新分析')),
+                  TextButton(
+                    onPressed: () => _load(force: true),
+                    child: const Text('继续分析'),
+                  ),
                 ],
               ),
             ),
@@ -4389,7 +4407,10 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
               child: Row(
                 children: [
                   const Expanded(child: Text('更新失败，当前显示上次结果')),
-                  TextButton(onPressed: _load, child: const Text('重试')),
+                  TextButton(
+                    onPressed: () => _load(force: true),
+                    child: const Text('重试'),
+                  ),
                 ],
               ),
             ),
@@ -4424,39 +4445,79 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBodyBehindAppBar: true,
-    appBar: const _FloatingGlassAppBar(title: Text('相似照片')),
+    appBar: _UnifiedAppBar(
+      title: '相似照片',
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Center(
+            child: _GlassSurface(
+              radius: 22,
+              child: PopupMenuButton<_SimilarityAction>(
+                key: const Key('similar-actions'),
+                tooltip: '分析选项',
+                enabled: !refreshing,
+                padding: EdgeInsets.zero,
+                onSelected: _selectAction,
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: _SimilarityAction.checkUpdates,
+                    child: Text('检查更新'),
+                  ),
+                  PopupMenuItem(
+                    value: _SimilarityAction.rebuild,
+                    child: Text('重新分析全部照片'),
+                  ),
+                ],
+                child: const SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Icon(Icons.more_horiz_rounded, size: 22),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
     body: groups != null
         ? _results()
         : failed
         ? Padding(
-            padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+            padding: EdgeInsets.only(top: _appHeaderInset(context)),
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('相似照片分析失败'),
                   const SizedBox(height: 12),
-                  OutlinedButton(onPressed: _load, child: const Text('重试')),
+                  OutlinedButton(
+                    onPressed: () => _load(force: true),
+                    child: const Text('重试'),
+                  ),
                 ],
               ),
             ),
           )
         : cancelled
         ? Padding(
-            padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+            padding: EdgeInsets.only(top: _appHeaderInset(context)),
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('已停止相似照片分析'),
                   const SizedBox(height: 12),
-                  OutlinedButton(onPressed: _load, child: const Text('重新分析')),
+                  OutlinedButton(
+                    onPressed: () => _load(force: true),
+                    child: const Text('继续分析'),
+                  ),
                 ],
               ),
             ),
           )
         : Padding(
-            padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+            padding: EdgeInsets.only(top: _appHeaderInset(context)),
             child: _loading(),
           ),
   );
@@ -4829,7 +4890,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
         if (!mounted || !gridController.hasClients) return;
         final columns = _photoGridColumnCount(MediaQuery.sizeOf(context).width);
         const horizontalPadding = 8.0;
-        final topPadding = _mediaHeaderInset(context) + 6;
+        final topPadding = _appHeaderInset(context) + 6;
         const spacing = 4.0;
         final itemExtent =
             (MediaQuery.sizeOf(context).width -
@@ -4995,12 +5056,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
       onNotification: _handleScroll,
       child: GridView.builder(
         key: ValueKey('library-${libraryTimeMode.name}-grid'),
-        padding: EdgeInsets.fromLTRB(
-          20,
-          _mediaHeaderInset(context) + 4,
-          20,
-          116,
-        ),
+        padding: EdgeInsets.fromLTRB(20, _appHeaderInset(context) + 4, 20, 116),
         itemCount: periods.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -5106,7 +5162,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
         widget.app.downAction == DownSwipeAction.pending;
     final padding = EdgeInsets.fromLTRB(
       4,
-      _mediaHeaderInset(context) + (showsPendingFilter ? 50 : 6),
+      _appHeaderInset(context) + (showsPendingFilter ? 50 : 6),
       4,
       widget.scope.key == Scope.all.key && !pendingOnly ? 116 : 82,
     );
@@ -5151,7 +5207,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
     if (showingAlbums) {
       return _LibraryAlbumsView(
         widget.app,
-        topPadding: _mediaHeaderInset(context),
+        topPadding: _appHeaderInset(context),
       );
     }
     if (libraryTimeMode != _LibraryTimeMode.all) return _periodGrid();
@@ -5256,7 +5312,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
     extendBodyBehindAppBar: true,
-    appBar: _MediaGradientAppBar(
+    appBar: _UnifiedAppBar(
       title: showingAlbums ? '相册' : widget.scope.label,
       subtitle: showingAlbums
           ? '按相册浏览'
@@ -5287,7 +5343,7 @@ class _ScopeScreenState extends State<ScopeScreen> {
             libraryTimeMode == _LibraryTimeMode.all &&
             widget.app.downAction == DownSwipeAction.pending)
           Positioned(
-            top: _mediaHeaderInset(context) + 4,
+            top: _appHeaderInset(context) + 4,
             right: 12,
             child: _GlassSurface(
               radius: 16,
@@ -6695,7 +6751,7 @@ class _ReviewScreenState extends State<ReviewScreen>
               left: 0,
               right: 0,
               top: 0,
-              height: 88,
+              height: _immersiveHeaderHeight,
               child: _SystemTopGradient(key: Key('page-top-gradient')),
             ),
             ValueListenableBuilder<int>(
@@ -6703,7 +6759,7 @@ class _ReviewScreenState extends State<ReviewScreen>
               builder: (context, _, _) => Visibility(
                 visible: zoom <= 1.001,
                 child: SafeArea(
-                  minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                  minimum: _immersiveHeaderPadding,
                   child: Stack(
                     children: [
                       Align(
@@ -7368,7 +7424,7 @@ class _QueueScreenState extends State<QueueScreen> {
     final contentY =
         local.dy +
         (queueScroll.hasClients ? queueScroll.offset : 0) -
-        (_floatingHeaderInset(context) + 52);
+        (_appHeaderInset(context) + 52);
     if (contentY < 0) return null;
     final row = (contentY / stride).floor();
     final index = row * columns + column;
@@ -7646,8 +7702,8 @@ class _QueueScreenState extends State<QueueScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBodyBehindAppBar: true,
-    appBar: _FloatingGlassAppBar(
-      title: const Text('待删除队列'),
+    appBar: _UnifiedAppBar(
+      title: '待删除队列',
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 10),
@@ -7685,7 +7741,7 @@ class _QueueScreenState extends State<QueueScreen> {
         Expanded(
           child: rows.isEmpty
               ? Padding(
-                  padding: EdgeInsets.only(top: _floatingHeaderInset(context)),
+                  padding: EdgeInsets.only(top: _appHeaderInset(context)),
                   child: const Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -7722,7 +7778,7 @@ class _QueueScreenState extends State<QueueScreen> {
                           : const NeverScrollableScrollPhysics(),
                       padding: EdgeInsets.fromLTRB(
                         8,
-                        _floatingHeaderInset(context) + 52,
+                        _appHeaderInset(context) + 52,
                         8,
                         0,
                       ),
@@ -7836,7 +7892,7 @@ class _QueueScreenState extends State<QueueScreen> {
                     Positioned(
                       left: 16,
                       right: 16,
-                      top: _floatingHeaderInset(context) + 4,
+                      top: _appHeaderInset(context) + 4,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: _GlassSurface(
@@ -8171,13 +8227,13 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
             left: 0,
             right: 0,
             top: 0,
-            height: 88,
+            height: _immersiveHeaderHeight,
             child: _SystemTopGradient(key: Key('page-top-gradient')),
           ),
           Visibility(
             visible: !zoomed,
             child: SafeArea(
-              minimum: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+              minimum: _immersiveHeaderPadding,
               child: Stack(
                 children: [
                   Align(
@@ -8189,6 +8245,8 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
                       onPressed: busy
                           ? null
                           : () => Navigator.maybePop(context),
+                      diameter: 44,
+                      iconSize: 19,
                     ),
                   ),
                   Align(
@@ -8289,16 +8347,11 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBodyBehindAppBar: true,
-    appBar: const _FloatingGlassAppBar(title: Text('设置')),
+    appBar: const _UnifiedAppBar(title: '设置'),
     body: AnimatedBuilder(
       animation: app,
       builder: (context, _) => ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          _floatingHeaderInset(context) + 8,
-          16,
-          28,
-        ),
+        padding: EdgeInsets.fromLTRB(16, _appHeaderInset(context) + 8, 16, 28),
         children: [
           Card(
             margin: EdgeInsets.zero,

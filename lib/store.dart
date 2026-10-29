@@ -339,18 +339,21 @@ class AppStore {
     required int algorithmVersion,
     required int maxDistance,
   }) async {
-    final groups = await similarityGroups(
-      algorithmVersion: algorithmVersion,
-      maxDistance: maxDistance,
+    final value = await setting(
+      _similarityGroupSettingKey(algorithmVersion, maxDistance),
     );
-    if (groups == null || groups.isEmpty) return null;
-    return int.tryParse(
-      await setting(
-            _similarityGroupSettingKey(algorithmVersion, maxDistance),
-          ) ??
-          '',
-    );
+    return value == null ? null : int.tryParse(value);
   }
+
+  Future<void> clearSimilarityAnalysis() => db.transaction((txn) async {
+    await txn.delete('media_similarity');
+    await txn.delete('media_similarity_group');
+    await txn.delete(
+      'app_settings',
+      where: 'key LIKE ?',
+      whereArgs: ['similarity_groups:%'],
+    );
+  });
 
   Future<void> replaceSimilarityGroups(
     List<List<String>> groups, {

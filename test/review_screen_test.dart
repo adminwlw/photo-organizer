@@ -27,6 +27,16 @@ class FakeMediaRepository extends MediaRepository {
   Future<int> cachedSimilarPhotoCount(AppStore store) async => 0;
 
   @override
+  Future<SimilarPhotoStatus> cachedSimilarPhotoStatus(AppStore store) async =>
+      const SimilarPhotoStatus(
+        hasAnalysis: false,
+        groupCount: 0,
+        photoCount: 0,
+        needsUpdate: true,
+        generatedAt: null,
+      );
+
+  @override
   Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async =>
       null;
 
@@ -90,9 +100,15 @@ class StartupMediaRepository extends FakeMediaRepository {
   }
 
   @override
-  Future<int> cachedSimilarPhotoCount(AppStore store) async {
+  Future<SimilarPhotoStatus> cachedSimilarPhotoStatus(AppStore store) async {
     cachedSimilarityRequests++;
-    return 0;
+    return const SimilarPhotoStatus(
+      hasAnalysis: false,
+      groupCount: 0,
+      photoCount: 0,
+      needsUpdate: true,
+      generatedAt: null,
+    );
   }
 
   @override
@@ -141,8 +157,26 @@ class QueuedAlbumsMediaRepository extends FakeMediaRepository {
 }
 
 class SimilarMediaRepository extends FakeMediaRepository {
+  int fullSimilarityRequests = 0;
+
   @override
   Future<int> cachedSimilarPhotoCount(AppStore store) async => 2;
+
+  @override
+  Future<SimilarPhotoStatus> cachedSimilarPhotoStatus(AppStore store) async =>
+      const SimilarPhotoStatus(
+        hasAnalysis: true,
+        groupCount: 1,
+        photoCount: 2,
+        needsUpdate: false,
+        generatedAt: 1800000000000,
+      );
+
+  @override
+  Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async =>
+      const [
+        SimilarPhotoGroup([photo, nextPhoto]),
+      ];
 
   @override
   Future<List<SimilarPhotoGroup>> findSimilarPhotos(
@@ -150,6 +184,7 @@ class SimilarMediaRepository extends FakeMediaRepository {
     void Function(int, int) onProgress, {
     bool Function()? shouldCancel,
   }) async {
+    fullSimilarityRequests++;
     onProgress(2, 2);
     return const [
       SimilarPhotoGroup([photo, nextPhoto]),
@@ -162,8 +197,34 @@ class SimilarMediaRepository extends FakeMediaRepository {
   };
 }
 
+class EmptyAnalyzedMediaRepository extends FakeMediaRepository {
+  @override
+  Future<SimilarPhotoStatus> cachedSimilarPhotoStatus(AppStore store) async =>
+      const SimilarPhotoStatus(
+        hasAnalysis: true,
+        groupCount: 0,
+        photoCount: 0,
+        needsUpdate: false,
+        generatedAt: 1800000000000,
+      );
+
+  @override
+  Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async =>
+      const [];
+}
+
 class RefreshingSimilarMediaRepository extends SimilarMediaRepository {
   final refresh = Completer<List<SimilarPhotoGroup>>();
+
+  @override
+  Future<SimilarPhotoStatus> cachedSimilarPhotoStatus(AppStore store) async =>
+      const SimilarPhotoStatus(
+        hasAnalysis: true,
+        groupCount: 1,
+        photoCount: 2,
+        needsUpdate: true,
+        generatedAt: 1800000000000,
+      );
 
   @override
   Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async =>
@@ -2001,6 +2062,9 @@ void main() {
       ),
     );
     expect(find.text('全部照片与视频'), findsOneWidget);
+    final homeHeaderTop = tester
+        .getTopLeft(find.byKey(const Key('home-root-header')))
+        .dy;
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('category-grid')),
@@ -2066,6 +2130,17 @@ void main() {
     expect(find.text('QQ'), findsOneWidget);
     expect(find.text('Download'), findsOneWidget);
     expect(find.byKey(const ValueKey('section-待删除')), findsNothing);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('albums-large-title'))).dy,
+      closeTo(homeHeaderTop, 1),
+    );
+
+    await tester.tap(find.byKey(const Key('profile-tab')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.getTopLeft(find.byKey(const Key('profile-large-title'))).dy,
+      closeTo(homeHeaderTop, 1),
+    );
   });
 
   testWidgets('all media cover uses an asymmetric art mosaic', (tester) async {
@@ -2159,7 +2234,7 @@ void main() {
     },
   );
 
-  testWidgets('home hides empty Android categories and shows similar count', (
+  testWidgets('home hides empty Android categories and shows similar status', (
     tester,
   ) async {
     final app = CleanerState(
@@ -2197,10 +2272,66 @@ void main() {
     expect(find.byKey(const ValueKey('category-category:live')), findsNothing);
     final similar = find.byKey(const ValueKey('category-similar'));
     expect(
-      find.descendant(of: similar, matching: find.text('2')),
+      find.descendant(of: similar, matching: find.text('1 组 · 2 张')),
       findsOneWidget,
     );
-    expect(find.text('分析'), findsNothing);
+  });
+
+  testWidgets('home prompts for the first similarity analysis', (tester) async {
+    final app = CleanerState(ScopeAppStore(database), FakeMediaRepository());
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('category-similar')),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('home-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+
+    final similar = find.byKey(const ValueKey('category-similar'));
+    expect(
+      find.descendant(of: similar, matching: find.text('点击分析')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('home distinguishes an analyzed empty similarity result', (
+    tester,
+  ) async {
+    final app = CleanerState(
+      ScopeAppStore(database),
+      EmptyAnalyzedMediaRepository(),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('category-similar')),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('home-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+
+    final similar = find.byKey(const ValueKey('category-similar'));
+    expect(
+      find.descendant(of: similar, matching: find.text('未发现')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: similar, matching: find.text('点击分析')),
+      findsNothing,
+    );
   });
 
   testWidgets('photo grids adapt from three to eight columns', (tester) async {
@@ -2630,6 +2761,26 @@ void main() {
     expect(store.actedMediaIds.single, nextPhoto.id);
     expect((await store.queue()).length, 1);
     expect(find.text('已加入待删除队列'), findsOneWidget);
+  });
+
+  testWidgets('cached similarity results only refresh on request', (
+    tester,
+  ) async {
+    final media = SimilarMediaRepository();
+    final app = CleanerState(ScopeAppStore(database), media);
+
+    await tester.pumpWidget(MaterialApp(home: SimilarPhotosScreen(app)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 1 组 · 2 张'), findsOneWidget);
+    expect(media.fullSimilarityRequests, 0);
+
+    await tester.tap(find.byKey(const Key('similar-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('检查更新'));
+    await tester.pumpAndSettle();
+
+    expect(media.fullSimilarityRequests, 1);
   });
 
   testWidgets('similar photos show cached groups while refreshing', (
@@ -3133,6 +3284,11 @@ void main() {
       expect(viewer.panEnabled, isFalse);
       expect(viewer.boundaryMargin, EdgeInsets.zero);
       expect(find.byKey(const Key('queue-preview-back')), findsOneWidget);
+      final backSize = tester.getSize(
+        find.byKey(const Key('queue-preview-back')),
+      );
+      expect(backSize.width, backSize.height);
+      expect(backSize.width, greaterThanOrEqualTo(44));
       expect(find.text('左右滑动浏览 · 下滑返回'), findsOneWidget);
       expect(find.text('保留此项'), findsOneWidget);
       expect(find.text('删除此项'), findsOneWidget);

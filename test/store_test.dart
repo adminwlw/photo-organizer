@@ -340,6 +340,27 @@ void main() {
           algorithmVersion: similarityAlgorithmVersion,
           maxDistance: similarityMaxDistance,
         ),
+        isNotNull,
+      );
+      final status = await MediaRepository().cachedSimilarPhotoStatus(store);
+      expect(status.hasAnalysis, isTrue);
+      expect(status.groupCount, 0);
+      expect(status.photoCount, 0);
+      expect(status.needsUpdate, isTrue);
+
+      await store.clearSimilarityAnalysis();
+      expect(
+        await store.similarityGroups(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
+        isNull,
+      );
+      expect(
+        await store.similarityGeneratedAt(
+          algorithmVersion: similarityAlgorithmVersion,
+          maxDistance: similarityMaxDistance,
+        ),
         isNull,
       );
     },

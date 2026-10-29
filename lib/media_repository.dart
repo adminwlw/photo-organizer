@@ -218,6 +218,22 @@ class SimilarPhotoGroup {
   final List<MediaRecord> items;
 }
 
+class SimilarPhotoStatus {
+  const SimilarPhotoStatus({
+    required this.hasAnalysis,
+    required this.groupCount,
+    required this.photoCount,
+    required this.needsUpdate,
+    required this.generatedAt,
+  });
+
+  final bool hasAnalysis;
+  final int groupCount;
+  final int photoCount;
+  final bool needsUpdate;
+  final int? generatedAt;
+}
+
 int photoHashDistance(String left, String right) {
   return _photoHashBitDistance(
     BigInt.parse(left, radix: 16),
@@ -780,6 +796,33 @@ class MediaRepository {
     };
     return (await _groupSimilarPhotoHashesReliably(cachedHashes))
         .fold<int>(0, (total, group) => total + group.length);
+  }
+
+  Future<SimilarPhotoStatus> cachedSimilarPhotoStatus(AppStore store) async {
+    final groups = await store.similarityGroups(
+      algorithmVersion: similarityAlgorithmVersion,
+      maxDistance: similarityMaxDistance,
+    );
+    if (groups == null) {
+      return const SimilarPhotoStatus(
+        hasAnalysis: false,
+        groupCount: 0,
+        photoCount: 0,
+        needsUpdate: true,
+        generatedAt: null,
+      );
+    }
+    final photos = await store.photoRecords();
+    final hashes = await store.similarityHashes(
+      algorithmVersion: similarityAlgorithmVersion,
+    );
+    return SimilarPhotoStatus(
+      hasAnalysis: true,
+      groupCount: groups.length,
+      photoCount: groups.fold<int>(0, (total, group) => total + group.length),
+      needsUpdate: hashes.length < photos.length,
+      generatedAt: await cachedSimilarityGeneratedAt(store),
+    );
   }
 
   Future<List<SimilarPhotoGroup>?> cachedSimilarPhotos(AppStore store) async {
