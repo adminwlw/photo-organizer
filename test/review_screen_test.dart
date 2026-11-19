@@ -420,7 +420,7 @@ class StartupAppStore extends ScopeAppStore {
   @override
   Future<String?> setting(String key) async => switch (key) {
     'onboarded' => onboarded ? '1' : null,
-    'down_swipe_action' => 'returnToAlbum',
+    'down_swipe_action' => 'undo',
     _ => null,
   };
 
@@ -859,7 +859,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: OnboardingScreen(
-          downAction: DownSwipeAction.returnToAlbum,
+          downAction: DownSwipeAction.undo,
           onDone: () async => completed++,
         ),
       ),
@@ -1019,17 +1019,18 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('onboarding-return-album-target')),
+      find.byKey(const ValueKey('onboarding-undo-target')),
       findsOneWidget,
     );
     expect(
-      find.bySemanticsLabel('下滑退出当前照片并返回当前相册列表，当前设置为返回相册'),
+      find.bySemanticsLabel('下滑默认撤回上一项操作，当前设置为撤回'),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('onboarding-current-album-grid')),
+      find.byKey(const ValueKey('onboarding-undo-restored-photo')),
       findsOneWidget,
     );
+    expect(find.text('已撤回上一步'), findsOneWidget);
     expect(completed, 0);
 
     await tester.tap(find.byKey(const Key('onboarding-next')));
@@ -1082,7 +1083,7 @@ void main() {
         home: MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
           child: OnboardingScreen(
-            downAction: DownSwipeAction.returnToAlbum,
+            downAction: DownSwipeAction.undo,
             onDone: () async {},
           ),
         ),
@@ -1106,7 +1107,7 @@ void main() {
       MaterialApp(
         theme: ThemeData(platform: TargetPlatform.iOS),
         home: OnboardingScreen(
-          downAction: DownSwipeAction.returnToAlbum,
+          downAction: DownSwipeAction.undo,
           onDone: () async {},
         ),
       ),
@@ -1762,48 +1763,54 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('the main review defaults a downward swipe to return to album', (
+  testWidgets('the main review defaults a downward swipe to undo', (
     tester,
   ) async {
     final store = UndoAppStore(database);
     final app = CleanerState(store, FakeMediaRepository());
-    expect(app.downAction, DownSwipeAction.returnToAlbum);
+    expect(app.downAction, DownSwipeAction.undo);
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              key: const Key('open-review'),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => ReviewScreen(
-                    app,
-                    Scope.all,
-                    source: const [photo, nextPhoto],
-                  ),
-                ),
-              ),
-              child: const Text('打开整理'),
-            ),
-          ),
+        home: ReviewScreen(
+          app,
+          Scope.all,
+          source: const [photo, nextPhoto],
         ),
       ),
     );
-    await tester.tap(find.byKey(const Key('open-review')));
-    await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 100));
 
-    final gesture = await tester.startGesture(
+    var gesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('photo'))),
     );
     await gesture.moveBy(const Offset(0, 100));
     await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(find.byType(ReviewScreen), findsNothing);
-    expect(store.actions, isEmpty);
+    expect(find.byType(ReviewScreen), findsOneWidget);
+    expect(find.text('暂无可撤回的操作'), findsOneWidget);
+
+    gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('photo'))),
+    );
+    await gesture.moveBy(const Offset(0, -100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
+    expect(store.queued, 1);
+
+    gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('next-photo'))),
+    );
+    await gesture.moveBy(const Offset(0, 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReviewScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('photo')), findsOneWidget);
+    expect(store.undone, ['photo']);
+    expect(store.queued, 0);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -1818,6 +1825,7 @@ void main() {
       find.byType(SegmentedButton<DownSwipeAction>),
     );
     expect(selector.segments.map((segment) => segment.value), [
+      DownSwipeAction.undo,
       DownSwipeAction.none,
       DownSwipeAction.pending,
       DownSwipeAction.returnToAlbum,
@@ -1829,7 +1837,8 @@ void main() {
     tester,
   ) async {
     final store = ScopeAppStore(database);
-    final app = CleanerState(store, FakeMediaRepository());
+    final app = CleanerState(store, FakeMediaRepository())
+      ..downAction = DownSwipeAction.returnToAlbum;
 
     await tester.pumpWidget(
       MaterialApp(home: ScopeScreen(app, Scope.all, startReview: true)),
@@ -1854,7 +1863,8 @@ void main() {
     tester,
   ) async {
     final store = LongScopeAppStore(database, initialAnchor: 'photo-80');
-    final app = CleanerState(store, FakeMediaRepository());
+    final app = CleanerState(store, FakeMediaRepository())
+      ..downAction = DownSwipeAction.returnToAlbum;
 
     await tester.pumpWidget(
       MaterialApp(home: ScopeScreen(app, Scope.all, startReview: true)),

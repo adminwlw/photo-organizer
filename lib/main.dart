@@ -30,16 +30,18 @@ final Stream<void> _hardwareVolumeButtonEvents = _hardwareVolumeChannel
     .receiveBroadcastStream()
     .map((_) {});
 
-enum DownSwipeAction { none, pending, returnToAlbum }
+enum DownSwipeAction { undo, none, pending, returnToAlbum }
 
 extension on DownSwipeAction {
   ReviewAction? get reviewAction => switch (this) {
+    DownSwipeAction.undo => null,
     DownSwipeAction.none => null,
     DownSwipeAction.pending => ReviewAction.pending,
     DownSwipeAction.returnToAlbum => null,
   };
 
   String get label => switch (this) {
+    DownSwipeAction.undo => '撤回',
     DownSwipeAction.none => '无',
     DownSwipeAction.pending => '待定',
     DownSwipeAction.returnToAlbum => '返回相册',
@@ -934,7 +936,7 @@ class CleanerState extends ChangeNotifier {
   bool scanFailed = false;
   int scanRevision = 0;
   PermissionState? permissionState;
-  DownSwipeAction downAction = DownSwipeAction.returnToAlbum;
+  DownSwipeAction downAction = DownSwipeAction.undo;
   List<(String, int)> months = [];
   MediaStorageSummary? storageSummary;
   Future<MediaStorageSummary>? _storageSummaryFuture;
@@ -969,10 +971,11 @@ class CleanerState extends ChangeNotifier {
     final permissionRequest = media.permission();
     onboarded = await onboardedRequest == '1';
     downAction = switch (await downActionRequest) {
+      'undo' || 'revoke' => DownSwipeAction.undo,
       'pending' || 'undecided' => DownSwipeAction.pending,
       'keep' || 'returnToAlbum' || 'skip' => DownSwipeAction.returnToAlbum,
       'none' => DownSwipeAction.none,
-      _ => DownSwipeAction.returnToAlbum,
+      _ => DownSwipeAction.undo,
     };
     months = await monthsRequest;
     permissionState = await permissionRequest;
@@ -1252,11 +1255,11 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen>
     with SingleTickerProviderStateMixin {
-  static const pageTitles = ['浏览照片', '加入待删除', '返回相册', '批量删除', '授权开始使用'];
+  static const pageTitles = ['浏览照片', '加入待删除', '撤回上一步', '批量删除', '授权开始使用'];
   static const pageDescriptions = [
     '左右轻扫查看上一张或下一张，双击或双指可放大细节。',
     '上滑只会加入待删除队列，不会立即删除；仍可在队列中改为保留。',
-    '下滑默认退出当前照片，返回正在整理的相册列表。',
+    '下滑默认撤回上一项操作，误删、误标记后可立即找回。',
     '进入待删除队列，勾选照片后批量删除；未选中的照片继续保留。',
     '首次使用请选择最上方的完整访问选项，才能整理整个图库。照片只在本机处理。',
   ];
@@ -1308,7 +1311,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   String _pageLabel(int index) => switch (index) {
     0 => '左右轻扫分页浏览，双击或双指放大照片',
     1 => '上滑将照片加入待删除队列，之后仍可改为保留',
-    2 => '下滑退出当前照片并返回当前相册列表，当前设置为${widget.downAction.label}',
+    2 => '下滑默认撤回上一项操作，当前设置为${widget.downAction.label}',
     3 => '进入待删除队列，选择照片后批量删除',
     _ => '授权开始使用，建议选择完整照片访问权限，照片只在本机处理',
   };
@@ -1658,96 +1661,56 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ],
             if (index == 2) ...[
-              Positioned(
-                left: 24,
-                right: 24,
-                top: 14,
-                bottom: 48,
-                child: Container(
-                  key: const ValueKey('onboarding-return-album-target'),
-                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x14000000), blurRadius: 16),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: _systemBlue,
-                            size: 13,
-                          ),
-                          SizedBox(width: 5),
-                          Text(
-                            '当前相册',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Spacer(),
-                          Text(
-                            '18 张',
-                            style: TextStyle(
-                              color: _secondaryLabel,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: GridView.count(
-                          key: const ValueKey('onboarding-current-album-grid'),
-                          padding: EdgeInsets.zero,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 4,
-                          crossAxisSpacing: 4,
-                          children:
-                              [
-                                    'assets/tutorial-portrait.jpg',
-                                    'assets/tutorial-landscape.jpg',
-                                    'assets/tutorial-still-life.jpg',
-                                    'assets/tutorial-landscape.jpg',
-                                    'assets/tutorial-still-life.jpg',
-                                    'assets/tutorial-portrait.jpg',
-                                  ]
-                                  .map(
-                                    (asset) => ClipRRect(
-                                      borderRadius: BorderRadius.circular(7),
-                                      child: Image.asset(
-                                        asset,
-                                        fit: BoxFit.cover,
-                                        cacheWidth: 180,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                        ),
-                      ),
-                    ],
-                  ),
+              Transform.scale(
+                key: const ValueKey('onboarding-undo-restored-photo'),
+                scale: 0.94 + 0.06 * actionProgress,
+                child: Opacity(
+                  opacity: actionProgress,
+                  child: _photoCard(asset: 'assets/tutorial-landscape.jpg'),
                 ),
               ),
               Transform.translate(
                 key: const ValueKey('onboarding-motion-target-3'),
-                offset: Offset(0, -22 + 118 * actionProgress),
+                offset: Offset(0, 24 + 154 * actionProgress),
                 child: Transform.scale(
-                  scale: 1 - 0.48 * actionProgress,
+                  scale: 1 - 0.12 * actionProgress,
                   child: Opacity(
                     opacity: 1 - actionProgress,
                     child: _photoCard(
                       asset: 'assets/tutorial-still-life.jpg',
-                      width: 124,
-                      height: 148,
                     ),
                   ),
+                ),
+              ),
+              Positioned(
+                top: 16,
+                right: 18,
+                child: Transform.scale(
+                  key: const ValueKey('onboarding-undo-target'),
+                  scale: 0.9 + 0.16 * pulse,
+                  child: Container(
+                    width: 54,
+                    height: 54,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE8F2FF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.undo_rounded,
+                      color: _systemBlue,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 78,
+                right: 16,
+                child: _motionPill(
+                  label: '已撤回上一步',
+                  icon: Icons.check_circle_rounded,
+                  color: _systemBlue,
+                  opacity: confirmationProgress,
                 ),
               ),
             ],
@@ -1937,13 +1900,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   label: switch (index) {
                     0 => '左右轻扫 · 双击放大',
                     1 => '上滑加入队列',
-                    2 => '下滑返回当前相册',
+                    2 => '下滑撤回上一步',
                     _ => '进入队列 · 选择 · 批量删除',
                   },
                   icon: switch (index) {
                     0 => Icons.swipe_rounded,
                     1 => Icons.delete_outline_rounded,
-                    2 => Icons.photo_library_outlined,
+                    2 => Icons.undo_rounded,
                     _ => Icons.delete_sweep_outlined,
                   },
                   color: index == 1 || index == 3 ? _systemRed : _systemBlue,
@@ -5985,6 +5948,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       nextPreview = null;
       zoom = 1;
       actionScale = 1;
+      dragOffset = Offset.zero;
       dragAxis = null;
       panOffset = Offset.zero;
     });
@@ -6422,6 +6386,11 @@ class _ReviewScreenState extends State<ReviewScreen>
         }
         return;
       }
+      if (dragOffset.dy > 0 &&
+          widget.app.downAction == DownSwipeAction.undo) {
+        await _undo(fromSwipe: true, velocity: speed.dy.abs());
+        return;
+      }
       final action = dragOffset.dy < 0
           ? ReviewAction.delete
           : widget.app.downAction.reviewAction;
@@ -6451,10 +6420,23 @@ class _ReviewScreenState extends State<ReviewScreen>
     await _returnToCenter(velocity: speed.distance);
   }
 
-  Future<void> _undo() async {
-    if (busy || undoHistory.isEmpty) return;
+  Future<void> _undo({bool fromSwipe = false, double velocity = 0}) async {
+    if (busy) return;
+    if (undoHistory.isEmpty) {
+      if (fromSwipe) {
+        await _returnToCenter(velocity: velocity);
+        if (mounted) _showEdgeNotice('暂无可撤回的操作');
+      }
+      return;
+    }
     setState(() => busy = true);
     try {
+      if (fromSwipe) {
+        await _animateTo(
+          Offset(0, MediaQuery.sizeOf(context).height * 1.08),
+          velocity: velocity,
+        );
+      }
       final snapshot = undoHistory.last;
       await widget.app.store.undo(snapshot);
       undoHistory.removeLast();
@@ -8398,6 +8380,10 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       ),
                       segments: const [
+                        ButtonSegment(
+                          value: DownSwipeAction.undo,
+                          label: Text('撤回'),
+                        ),
                         ButtonSegment(
                           value: DownSwipeAction.none,
                           label: Text('无'),
