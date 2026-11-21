@@ -5776,9 +5776,12 @@ class _ReviewScreenState extends State<ReviewScreen>
   static const reviewBackground = _systemBackground;
   static const _horizontalFlingVelocity = 700.0;
   static const _verticalFlingVelocity = 900.0;
+  static const _undoFlingVelocity = 1050.0;
   static const _horizontalFlingDistance = 24.0;
   static const _verticalFlingDistance = 32.0;
+  static const _undoFlingDistance = 48.0;
   static const _verticalActionDistance = 76.0;
+  static const _undoActionDistance = 104.0;
   static const _filmstripItemWidth = 26.0;
   static const _filmstripSelectedWidth = 60.0;
   static const _filmstripSelectedTileWidth = 48.0;
@@ -5850,7 +5853,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     undoMotion =
         AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 260),
         )..addListener(() {
           if (!mounted) return;
           undoPullProgress = undoProgressAnimation.value;
@@ -6218,7 +6221,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   }
 
   Future<void> _animateUndoTo(double target, {Duration? duration}) async {
-    undoMotion.duration = duration ?? const Duration(milliseconds: 200);
+    undoMotion.duration = duration ?? const Duration(milliseconds: 260);
     undoProgressAnimation = Tween<double>(
       begin: undoPullProgress,
       end: target,
@@ -6240,7 +6243,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     ];
     if (undoCandidate != null || undoPullProgress > 0) {
       animations.add(
-        _animateUndoTo(0, duration: const Duration(milliseconds: 150)),
+        _animateUndoTo(0, duration: const Duration(milliseconds: 180)),
       );
     }
     await Future.wait(animations);
@@ -6449,10 +6452,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       dragOffset = Offset.zero;
       actionScale = 1;
       undoCandidate = undoHistory.isEmpty ? null : undoHistory.last;
-      undoPullProgress = (panOffset.dy / _verticalActionDistance).clamp(
-        0.0,
-        1.0,
-      );
+      undoPullProgress = (panOffset.dy / _undoActionDistance).clamp(0.0, 1.0);
       if (undoPullProgress >= 1 &&
           !undoThresholdHaptic &&
           undoCandidate != null) {
@@ -6507,9 +6507,11 @@ class _ReviewScreenState extends State<ReviewScreen>
       distance: verticalDistance,
       velocity: speed.dy,
       crossVelocity: speed.dx,
-      distanceThreshold: _verticalActionDistance,
-      flingDistance: _verticalFlingDistance,
-      flingVelocity: _verticalFlingVelocity,
+      distanceThreshold: undoPull
+          ? _undoActionDistance
+          : _verticalActionDistance,
+      flingDistance: undoPull ? _undoFlingDistance : _verticalFlingDistance,
+      flingVelocity: undoPull ? _undoFlingVelocity : _verticalFlingVelocity,
     );
     if (dragAxis == Axis.vertical && verticalCommit) {
       if (verticalDistance > 0 &&
@@ -6581,7 +6583,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     });
     try {
       await Future.wait([
-        _animateUndoTo(1, duration: const Duration(milliseconds: 200)),
+        _animateUndoTo(1, duration: const Duration(milliseconds: 260)),
         widget.app.store.undo(entry.snapshot),
       ]);
       queueCount = (await widget.app.store.queue()).length;
@@ -6633,7 +6635,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     } catch (_) {
       undoHistory.add(entry);
       if (mounted) {
-        await _animateUndoTo(0, duration: const Duration(milliseconds: 150));
+        await _animateUndoTo(0, duration: const Duration(milliseconds: 180));
         if (mounted) {
           setState(_clearUndoPull);
           _showEdgeNotice('撤回失败，请重试');
@@ -6744,7 +6746,7 @@ class _ReviewScreenState extends State<ReviewScreen>
             : Offset.zero;
         final returning = undoCandidate;
         final returnProgress = undoPullProgress.clamp(0.0, 1.0);
-        final returnCurve = Curves.easeOutCubic.transform(returnProgress);
+        final returnOpacity = Curves.easeOutQuad.transform(returnProgress);
         final returnStart = Offset(
           screenWidth * 0.4,
           -MediaQuery.sizeOf(context).height * 0.44,
@@ -6789,13 +6791,18 @@ class _ReviewScreenState extends State<ReviewScreen>
             ),
             if (returning != null && undoPullProgress > 0)
               Opacity(
-                opacity: returnProgress,
+                key: const Key('undo-return-opacity'),
+                opacity: returnOpacity,
                 child: Transform.translate(
                   key: const Key('undo-return-translation'),
-                  offset: Offset.lerp(returnStart, Offset.zero, returnCurve)!,
+                  offset: Offset.lerp(
+                    returnStart,
+                    Offset.zero,
+                    returnProgress,
+                  )!,
                   child: Transform.scale(
                     key: const Key('undo-return-scale'),
-                    scale: ui.lerpDouble(0.1, 1, returnCurve)!,
+                    scale: ui.lerpDouble(0.1, 1, returnProgress)!,
                     child: MediaView(
                       widget.app.media,
                       returning.item,
