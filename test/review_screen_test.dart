@@ -509,6 +509,15 @@ class ProgressScopeAppStore extends ScopeAppStore {
       const ReviewProgress(position: 1, total: 2, updatedAt: 1000);
 }
 
+class HomeResumeAppStore extends ProgressScopeAppStore {
+  HomeResumeAppStore(super.db, {required this.anchorId});
+
+  final String anchorId;
+
+  @override
+  Future<String?> anchor(Scope scope) async => anchorId;
+}
+
 class LongScopeAppStore extends ScopeAppStore {
   LongScopeAppStore(super.db, {required this.initialAnchor});
 
@@ -2284,9 +2293,12 @@ void main() {
     expect(find.byKey(const Key('home-settings')), findsNothing);
     expect(find.byKey(const Key('home-tutorial')), findsOneWidget);
     expect(find.text('相册删除'), findsOneWidget);
-    expect(find.text('清理重复和无用照片\n让相册更清爽'), findsOneWidget);
-    expect(find.text('从上次停下的位置继续整理'), findsOneWidget);
-    expect(find.byKey(const Key('home-hero-landscape')), findsOneWidget);
+    expect(find.text('让相册轻盈一点'), findsOneWidget);
+    expect(find.byKey(const Key('home-hero-landscape')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('home-resume-cover-photo')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('home-hero-photo-0')), findsNothing);
     expect(find.byKey(const ValueKey('category-all')), findsOneWidget);
     final allMediaSize = tester.getSize(
@@ -2294,7 +2306,7 @@ void main() {
     );
     expect(allMediaSize.width, greaterThan(allMediaSize.height * 1.7));
     expect(allMediaSize.height, inInclusiveRange(160, 175));
-    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 144);
     expect(find.byKey(const Key('review-hero-glass')), findsOneWidget);
     expect(
       find.descendant(
@@ -2305,6 +2317,8 @@ void main() {
     );
     expect(find.text('整理进度'), findsNothing);
     expect(find.text('待删除队列'), findsNothing);
+    expect(find.byKey(const Key('home-queue-shortcut')), findsOneWidget);
+    expect(find.text('待删除 0 项'), findsOneWidget);
     expect(find.byKey(const ValueKey('all-media-cover-photo')), findsOneWidget);
     expect(find.byKey(const ValueKey('all-media-cover-video')), findsOneWidget);
     expect(
@@ -3315,6 +3329,96 @@ void main() {
     expect(store.actions, [ReviewAction.restore]);
   });
 
+  testWidgets(
+    'home preview matches the resumed media and stale anchors fall back',
+    (tester) async {
+      for (final anchor in [nextPhoto.id, 'missing-photo']) {
+        final app = CleanerState(
+          HomeResumeAppStore(database, anchorId: anchor),
+          AlbumsMediaRepository(),
+        );
+        await tester.pumpWidget(
+          MaterialApp(home: HomeScreen(app, key: ValueKey(anchor))),
+        );
+        await tester.pumpAndSettle();
+        final expected = anchor == nextPhoto.id ? nextPhoto.id : photo.id;
+        expect(
+          find.byKey(ValueKey('home-resume-cover-$expected')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const Key('review-hero')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ReviewScreen), findsOneWidget);
+        expect(find.byKey(ValueKey(expected)), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+
+  testWidgets(
+    'home queue entry opens review and refreshes its count on return',
+    (tester) async {
+      final queuedIds = [photo.id, nextPhoto.id];
+      final app = CleanerState(
+        QueuedScopeAppStore(database, queuedIds),
+        AlbumsMediaRepository(),
+      );
+      await tester.pumpWidget(MaterialApp(home: HomeScreen(app)));
+      await tester.pumpAndSettle();
+      expect(find.text('待删除 2 项'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home-queue-shortcut')));
+      await tester.pumpAndSettle();
+      expect(find.byType(QueueScreen), findsOneWidget);
+      queuedIds.clear();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('待删除 0 项'), findsOneWidget);
+      expect(find.byType(QueueScreen), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'compact home shortcuts fit small, large-text and tablet layouts',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            CleanerState(ScopeAppStore(database), AlbumsMediaRepository()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Exercise only the changed region; the existing overview has a fixed height.
+      final shortcuts = tester.widget(find.byKey(const Key('home-shortcuts')));
+      for (final width in [320.0, 390.0, 768.0]) {
+        for (final scale in [1.0, 1.6]) {
+          tester.view.physicalSize = Size(width, 1024);
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(body: SingleChildScrollView(child: shortcuts)),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: '$width at text scale $scale',
+          );
+          expect(find.byKey(const Key('home-queue-shortcut')), findsOneWidget);
+        }
+      }
+    },
+  );
+
   testWidgets('home keeps one resume entry and the media grid has none', (
     tester,
   ) async {
@@ -3327,7 +3431,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('继续整理'), findsOneWidget);
     expect(find.text('回到上次位置'), findsNothing);
-    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 76);
+    expect(tester.getSize(find.byKey(const Key('review-hero'))).height, 144);
 
     await tester.pumpWidget(MaterialApp(home: ScopeScreen(app, Scope.all)));
     await tester.pumpAndSettle();

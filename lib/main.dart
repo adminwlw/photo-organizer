@@ -2227,6 +2227,9 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<MediaRecord>> allMediaCover;
   late Future<List<int>> localCategoryCounts;
   late Future<SimilarPhotoStatus> similarPhotoStatus;
+  late Future<({ReviewProgress? progress, int available, MediaRecord? cover})>
+  homeReview;
+  late Future<List<Map<String, Object?>>> homeQueue;
   late int observedScanRevision;
   MediaStorageSummary? storage;
   bool storageLoading = false;
@@ -2246,6 +2249,7 @@ class _HomeScreenState extends State<HomeScreen> {
     allMediaCover = _loadAllMediaCover();
     localCategoryCounts = _loadLocalCategoryCounts();
     similarPhotoStatus = _loadSimilarPhotoStatus();
+    _reloadHomeShortcuts();
   }
 
   @override
@@ -2258,6 +2262,7 @@ class _HomeScreenState extends State<HomeScreen> {
     allMediaCover = _loadAllMediaCover();
     localCategoryCounts = _loadLocalCategoryCounts();
     similarPhotoStatus = _loadSimilarPhotoStatus();
+    _reloadHomeShortcuts();
     if (systemAlbums != null) systemAlbums = _loadVisibleSystemAlbums(app);
     if (Platform.isIOS) systemCategories = _loadVisibleSystemCategories(app);
   }
@@ -2287,12 +2292,34 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<SimilarPhotoStatus> _loadSimilarPhotoStatus() =>
       app.media.cachedSimilarPhotoStatus(app.store);
 
+  void _reloadHomeShortcuts() {
+    homeReview = _loadHomeReview();
+    homeQueue = app.store.queue();
+  }
+
+  Future<({ReviewProgress? progress, int available, MediaRecord? cover})>
+  _loadHomeReview() async {
+    final progress = await app.store.reviewProgress(Scope.all);
+    final available = await app.store.count(Scope.all, unreviewedOnly: true);
+    final anchor = await app.store.anchor(Scope.all);
+    var position = anchor == null
+        ? 0
+        : await app.store.positionOf(Scope.all, anchor, unreviewedOnly: true);
+    // Match ReviewScreen's resume fallback when the anchor is no longer usable.
+    position = available > 0 ? position.clamp(0, available - 1) : 0;
+    final cover = available > 0
+        ? await app.store.at(Scope.all, position, unreviewedOnly: true)
+        : null;
+    return (progress: progress, available: available, cover: cover);
+  }
+
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     if (mounted) {
       setState(() {
         allMediaCover = _loadAllMediaCover();
         similarPhotoStatus = _loadSimilarPhotoStatus();
+        _reloadHomeShortcuts();
         if (systemAlbums != null) systemAlbums = _loadVisibleSystemAlbums(app);
         if (Platform.isIOS) {
           systemCategories = _loadVisibleSystemCategories(app);
@@ -2500,206 +2527,251 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _heroIntro() => SizedBox(
-    height: 142,
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final artWidth = (constraints.maxWidth * 0.43)
-            .clamp(136.0, 166.0)
-            .toDouble();
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: 0,
-              top: 18,
-              width: constraints.maxWidth - artWidth - 8,
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '清理重复和无用照片\n让相册更清爽',
-                    style: TextStyle(
-                      color: Color(0xFF111A35),
-                      fontSize: 17,
-                      height: 1.22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  SizedBox(height: 9),
-                  Text(
-                    '从上次停下的位置继续整理',
-                    style: TextStyle(
-                      color: Color(0xFF6E7892),
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
+  Widget _resumeArtwork(MediaRecord? cover, double width) => SizedBox(
+    width: width,
+    height: 108,
+    child: ExcludeSemantics(
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Transform.rotate(
+            angle: -0.12,
+            child: Container(
+              width: width - 12,
+              height: 88,
+              decoration: BoxDecoration(
+                color: const Color(0xB3E2EEFF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white, width: 3),
+              ),
+            ),
+          ),
+          Transform.rotate(
+            angle: 0.08,
+            child: Container(
+              width: width - 6,
+              height: 94,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x2523469A),
+                    blurRadius: 10,
+                    offset: Offset(0, 5),
                   ),
                 ],
               ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: cover == null
+                    ? const ColoredBox(
+                        color: Color(0xFFE7EEFA),
+                        child: Icon(
+                          Icons.photo_library_outlined,
+                          color: _systemBlue,
+                        ),
+                      )
+                    : MediaThumb(
+                        app.media,
+                        cover.id,
+                        key: ValueKey('home-resume-cover-${cover.id}'),
+                        width: 320,
+                        height: 320,
+                      ),
+              ),
             ),
-            Positioned(
-              right: 12,
-              top: -2,
-              width: artWidth,
-              height: 116,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white, width: 4),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x1F23469A),
-                      blurRadius: 18,
-                      offset: Offset(0, 7),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _reviewHero() =>
+      FutureBuilder<
+        ({ReviewProgress? progress, int available, MediaRecord? cover})
+      >(
+        future: homeReview,
+        builder: (context, snapshot) {
+          final data = snapshot.data;
+          final progress = data?.progress;
+          final hasProgress = progress != null && progress.total > 0;
+          final completed = hasProgress
+              ? (progress.position + 1).clamp(0, progress.total)
+              : 0;
+          final ratio = hasProgress ? completed / progress.total : 0.0;
+          final enabled = data != null && data.available > 0;
+          final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+          return _GlassSurface(
+            key: const Key('review-hero-glass'),
+            radius: 22,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: const Key('review-hero'),
+                borderRadius: BorderRadius.circular(22),
+                onTap: enabled
+                    ? () =>
+                          _open(ScopeScreen(app, Scope.all, startReview: true))
+                    : null,
+                child: SizedBox(
+                  height: 144 + (textScale - 1).clamp(0, 2) * 80,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final artWidth = (constraints.maxWidth * 0.28).clamp(
+                          62.0,
+                          104.0,
+                        );
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '让相册轻盈一点',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: _secondaryLabel,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+                                  Text(
+                                    hasProgress ? '继续整理' : '开始整理',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: _primaryLabel,
+                                      fontSize: 21,
+                                      height: 1.15,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    hasProgress
+                                        ? '第 $completed / ${progress.total} 项'
+                                        : data == null
+                                        ? '正在读取相册'
+                                        : '当前可整理 ${data.available} 项',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: _secondaryLabel,
+                                      fontSize: 12,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: LinearProgressIndicator(
+                                      value: ratio,
+                                      minHeight: 4,
+                                      color: _systemBlue,
+                                      backgroundColor: const Color(0x263A7BFF),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: enabled
+                                    ? _systemBlue
+                                    : const Color(0x337F9DBD),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _resumeArtwork(data?.cover, artWidth),
+                          ],
+                        );
+                      },
                     ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    'assets/home-hero-landscape.jpg',
-                    key: const Key('home-hero-landscape'),
-                    fit: BoxFit.cover,
-                    alignment: const Alignment(-0.25, -0.08),
-                    cacheWidth: 720,
-                    excludeFromSemantics: true,
                   ),
                 ),
               ),
             ),
-          ],
-        );
-      },
-    ),
-  );
+          );
+        },
+      );
 
-  Widget _reviewHero() => FutureBuilder<ReviewProgress?>(
-    future: app.store.reviewProgress(Scope.all),
-    builder: (context, progressSnapshot) => FutureBuilder<int>(
-      future: app.store.count(Scope.all, unreviewedOnly: true),
-      builder: (context, countSnapshot) {
-        final progress = progressSnapshot.data;
-        final hasProgress = progress != null && progress.total > 0;
-        final available = countSnapshot.data;
-        final total = hasProgress ? progress.total : available;
-        final completed = hasProgress
-            ? (progress.position + 1).clamp(0, progress.total)
-            : 0;
-        final ratio = hasProgress ? completed / progress.total : 0.0;
-        final percent = (ratio * 100).round();
-        final enabled = hasProgress || available != 0;
-        return _GlassSurface(
-          key: const Key('review-hero-glass'),
-          radius: 22,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              key: const Key('review-hero'),
-              borderRadius: BorderRadius.circular(22),
-              onTap: enabled
-                  ? () => _open(ScopeScreen(app, Scope.all, startReview: true))
-                  : null,
-              child: SizedBox(
-                height: 76,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
+  Widget _homeQueueShortcut() => FutureBuilder<List<Map<String, Object?>>>(
+    future: homeQueue,
+    builder: (context, snapshot) => _GlassSurface(
+      radius: 20,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('home-queue-shortcut'),
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _open(QueueScreen(app)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE4EEFF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.inbox_outlined, color: _systemBlue),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: 52,
-                        height: 52,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: 52,
-                              height: 52,
-                              child: CircularProgressIndicator(
-                                value: ratio,
-                                strokeWidth: 4,
-                                backgroundColor: const Color(0x99FFFFFF),
-                                color: _systemBlue,
-                              ),
-                            ),
-                            Container(
-                              width: 42,
-                              height: 42,
-                              alignment: Alignment.center,
-                              decoration: const BoxDecoration(
-                                color: Color(0xBFFFFFFF),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '$percent%',
-                                style: const TextStyle(
-                                  color: Color(0xFF1557F8),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
+                      Text(
+                        snapshot.hasData
+                            ? '待删除 ${snapshot.data!.length} 项'
+                            : '待删除',
+                        style: const TextStyle(
+                          color: _primaryLabel,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              hasProgress ? '继续整理' : '开始整理',
-                              style: const TextStyle(
-                                color: _primaryLabel,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              hasProgress
-                                  ? '第 $completed / ${progress.total} 项'
-                                  : total == null
-                                  ? '正在读取相册'
-                                  : '当前可整理 $total 项照片与视频',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: _secondaryLabel,
-                                fontSize: 13,
-                                height: 1.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: enabled
-                              ? const Color(0xBFFFFFFF)
-                              : const Color(0x66FFFFFF),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Color(0xFF3158E6),
-                          size: 24,
-                        ),
+                      const SizedBox(height: 3),
+                      const Text(
+                        '复核后再删除',
+                        style: TextStyle(color: _secondaryLabel, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                const Text(
+                  '去复核',
+                  style: TextStyle(
+                    color: _systemBlue,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: _systemBlue, size: 20),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     ),
   );
 
@@ -3107,6 +3179,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _homeHeader() => Stack(
+    key: const Key('home-shortcuts'),
     children: [
       Positioned.fill(
         child: Image.asset(
@@ -3120,7 +3193,11 @@ class _HomeScreenState extends State<HomeScreen> {
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: Column(
-          children: [_heroIntro(), const SizedBox(height: 4), _reviewHero()],
+          children: [
+            _reviewHero(),
+            const SizedBox(height: 12),
+            _homeQueueShortcut(),
+          ],
         ),
       ),
     ],
