@@ -329,6 +329,20 @@ class UndoAppStore extends FakeAppStore {
   }
 }
 
+class DelayedUndoAppStore extends UndoAppStore {
+  DelayedUndoAppStore(super.db);
+
+  final undoResult = Completer<void>();
+  int undoCalls = 0;
+
+  @override
+  Future<void> undo(ActionSnapshot snapshot) async {
+    undoCalls++;
+    await undoResult.future;
+    await super.undo(snapshot);
+  }
+}
+
 class DelayedActionStore extends UndoAppStore {
   DelayedActionStore(super.db);
 
@@ -1022,10 +1036,7 @@ void main() {
       find.byKey(const ValueKey('onboarding-undo-target')),
       findsOneWidget,
     );
-    expect(
-      find.bySemanticsLabel('下滑默认撤回上一项操作，当前设置为撤回'),
-      findsOneWidget,
-    );
+    expect(find.bySemanticsLabel('下滑默认撤回上一项操作，当前设置为撤回'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('onboarding-undo-restored-photo')),
       findsOneWidget,
@@ -1268,6 +1279,132 @@ void main() {
     expect(progressPosition.right, 30);
     expect(progressPosition.bottom, 142);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('review leaves the full-width top area clear over the media', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.all,
+          source: const [photo],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('page-top-gradient')), findsNothing);
+  });
+
+  testWidgets('video controls use a scrubber thumb and bottom play button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.videos,
+          source: const [video],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final progress = find.byKey(const Key('video-progress'));
+    expect(
+      find.descendant(
+        of: progress,
+        matching: find.byKey(const Key('video-play-pause')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: progress, matching: find.byType(Slider)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('scrubbing the video does not browse to the next media', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.videos,
+          source: const [video, nextPhoto],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.drag(
+      find.byKey(const Key('video-progress')),
+      const Offset(-180, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('video')), findsOneWidget);
+    expect(find.byKey(const ValueKey('next-photo')), findsNothing);
+    expect(find.text('1 / 2'), findsOneWidget);
+  });
+
+  testWidgets('media details opens from the middle bottom action', (
+    tester,
+  ) async {
+    const detailedPhoto = MediaRecord(
+      id: 'detailed-photo',
+      takenAt: 1800000000000,
+      width: 4032,
+      height: 3024,
+      month: '2027-01',
+      type: 1,
+      duration: 0,
+      screenshot: false,
+      selfie: false,
+      live: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.all,
+          source: const [detailedPhoto],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(const Key('media-details-control')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('照片详情'), findsOneWidget);
+    expect(find.text('4032 × 3024'), findsOneWidget);
+  });
+
+  testWidgets('the filmstrip makes the current item distinctly wider', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(FakeAppStore(database), FakeMediaRepository()),
+          Scope.all,
+          source: const [photo, nextPhoto],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final selected = tester.getSize(
+      find.byKey(const ValueKey('review-filmstrip-tile-photo')),
+    );
+    final inactive = tester.getSize(
+      find.byKey(const ValueKey('review-filmstrip-tile-next-photo')),
+    );
+    expect(selected.width - inactive.width, greaterThanOrEqualTo(20));
   });
 
   testWidgets('the review queue count stays fully inside the viewport', (
@@ -1772,11 +1909,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ReviewScreen(
-          app,
-          Scope.all,
-          source: const [photo, nextPhoto],
-        ),
+        home: ReviewScreen(app, Scope.all, source: const [photo, nextPhoto]),
       ),
     );
     await tester.pump(const Duration(milliseconds: 100));
@@ -1803,7 +1936,23 @@ void main() {
     gesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('next-photo'))),
     );
-    await gesture.moveBy(const Offset(0, 100));
+    await gesture.moveBy(const Offset(0, 48));
+    await tester.pump();
+
+    final currentTranslation = tester.widget<Transform>(
+      find.byKey(const Key('media-drag-translation')),
+    );
+    expect(currentTranslation.transform.storage[13], 0);
+    final returning = tester.widget<Transform>(
+      find.byKey(const Key('undo-return-translation')),
+    );
+    expect(returning.transform.storage[12], greaterThan(0));
+    expect(returning.transform.storage[13], lessThan(0));
+    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
+
+    await gesture.moveBy(const Offset(0, 52));
+    await tester.pump();
+    expect(find.text('松开撤回上一张'), findsOneWidget);
     await gesture.up();
     await tester.pumpAndSettle();
 
@@ -1811,7 +1960,88 @@ void main() {
     expect(find.byKey(const ValueKey('photo')), findsOneWidget);
     expect(store.undone, ['photo']);
     expect(store.queued, 0);
+    expect(find.text('已撤回 1 张'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('one downward gesture consumes only one undo entry', (
+    tester,
+  ) async {
+    final store = UndoAppStore(database);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(store, FakeMediaRepository()),
+          Scope.all,
+          source: const [photo, nextPhoto, thirdPhoto],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    for (final id in ['photo', 'next-photo']) {
+      final deleteGesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(id))),
+      );
+      await deleteGesture.moveBy(const Offset(0, -100));
+      await deleteGesture.up();
+      await tester.pumpAndSettle();
+    }
+    expect(store.queued, 2);
+
+    final undoGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('third-photo'))),
+    );
+    await undoGesture.moveBy(const Offset(0, 100));
+    await undoGesture.up();
+    await tester.pumpAndSettle();
+
+    expect(store.undone, ['next-photo']);
+    expect(store.queued, 1);
+    expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
+  });
+
+  testWidgets('a pending undo ignores a second downward gesture', (
+    tester,
+  ) async {
+    final store = DelayedUndoAppStore(database);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewScreen(
+          CleanerState(store, FakeMediaRepository()),
+          Scope.all,
+          source: const [photo, nextPhoto],
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final deleteGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('photo'))),
+    );
+    await deleteGesture.moveBy(const Offset(0, -100));
+    await deleteGesture.up();
+    await tester.pumpAndSettle();
+
+    var undoGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('next-photo'))),
+    );
+    await undoGesture.moveBy(const Offset(0, 100));
+    await undoGesture.up();
+    await tester.pump(const Duration(milliseconds: 240));
+    expect(store.undoCalls, 1);
+
+    undoGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('review-gesture'))),
+    );
+    await undoGesture.moveBy(const Offset(0, 100));
+    await undoGesture.up();
+    await tester.pump();
+    expect(store.undoCalls, 1);
+
+    store.undoResult.complete();
+    await tester.pumpAndSettle();
+    expect(store.undone, ['photo']);
   });
 
   testWidgets('settings no longer offers a downward skip action', (
@@ -3163,7 +3393,7 @@ void main() {
   );
 
   testWidgets(
-    'filmstrip center follows scrolling with compact zero-gap tiles',
+    'filmstrip center follows scrolling with extra space around selection',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -3184,14 +3414,20 @@ void main() {
       final third = find.byKey(
         const ValueKey('review-filmstrip-tile-third-photo'),
       );
-      expect(tester.getSize(first), const Size(36, 40));
-      expect(tester.getSize(selected), const Size(42, 46));
-      expect(tester.getTopRight(first).dx, tester.getTopLeft(selected).dx);
-      expect(tester.getTopRight(selected).dx, tester.getTopLeft(third).dx);
+      expect(tester.getSize(first), const Size(26, 34));
+      expect(tester.getSize(selected), const Size(48, 46));
+      expect(
+        tester.getTopLeft(selected).dx - tester.getTopRight(first).dx,
+        greaterThanOrEqualTo(6),
+      );
+      expect(
+        tester.getTopLeft(third).dx - tester.getTopRight(selected).dx,
+        greaterThanOrEqualTo(6),
+      );
 
       await tester.drag(
         find.byKey(const Key('review-filmstrip')),
-        const Offset(-36, 0),
+        const Offset(-26, 0),
       );
       await tester.pumpAndSettle();
       expect(find.text('3 / 3'), findsOneWidget);

@@ -75,6 +75,14 @@ String _formatMediaDate(int milliseconds) {
   return '${date.year}年${date.month}月${date.day}日';
 }
 
+String _formatMediaDateTime(int milliseconds) {
+  if (milliseconds <= 0) return '日期未知';
+  final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${date.year}年${date.month}月${date.day}日 '
+      '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+}
+
 String _formatSimilarityGeneratedAt(int milliseconds) {
   final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
   String twoDigits(int value) => value.toString().padLeft(2, '0');
@@ -189,7 +197,6 @@ Future<List<SystemCategorySummary>> _loadVisibleSystemCategories(
 double _appHeaderInset(BuildContext context) =>
     MediaQuery.paddingOf(context).top + 60;
 
-const _immersiveHeaderHeight = 88.0;
 const _immersiveHeaderPadding = EdgeInsets.fromLTRB(14, 8, 14, 14);
 
 EdgeInsets _immersiveMediaPadding(BuildContext context) {
@@ -358,6 +365,8 @@ class _AppleZoomableMedia extends StatefulWidget {
     this.onSwipeEnd,
     this.onSwipeCancel,
     this.onZoomChanged,
+    this.swipeEnabled = true,
+    this.isSwipeBlocked,
   });
 
   final Widget child;
@@ -367,6 +376,8 @@ class _AppleZoomableMedia extends StatefulWidget {
   final Future<void> Function(Velocity velocity)? onSwipeEnd;
   final VoidCallback? onSwipeCancel;
   final ValueChanged<bool>? onZoomChanged;
+  final bool swipeEnabled;
+  final bool Function()? isSwipeBlocked;
 
   @override
   State<_AppleZoomableMedia> createState() => _AppleZoomableMediaState();
@@ -386,6 +397,7 @@ class _AppleZoomableMediaState extends State<_AppleZoomableMedia>
   Offset? doubleTapPosition;
   double swipeDistance = 0;
   bool zoomed = false;
+  bool swipeBlockedUntilPointerUp = false;
 
   @override
   void initState() {
@@ -407,6 +419,18 @@ class _AppleZoomableMediaState extends State<_AppleZoomableMedia>
     animation.dispose();
     transformation.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AppleZoomableMedia oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.swipeEnabled && !widget.swipeEnabled) {
+      swipeBlockedUntilPointerUp = true;
+      swipePointer = null;
+      velocityTracker = null;
+      swipeDistance = 0;
+      widget.onSwipeCancel?.call();
+    }
   }
 
   void _syncZoom() {
@@ -443,7 +467,11 @@ class _AppleZoomableMediaState extends State<_AppleZoomableMedia>
 
   void _pointerDown(PointerDownEvent event) {
     pointers.add(event.pointer);
-    if (pointers.length == 1 && !zoomed) {
+    if (widget.isSwipeBlocked?.call() == true) {
+      swipeBlockedUntilPointerUp = true;
+      return;
+    }
+    if (pointers.length == 1 && !zoomed && widget.swipeEnabled) {
       swipePointer = event.pointer;
       swipeDistance = 0;
       velocityTracker = VelocityTracker.withKind(event.kind)
@@ -459,17 +487,36 @@ class _AppleZoomableMediaState extends State<_AppleZoomableMedia>
   }
 
   void _pointerMove(PointerMoveEvent event) {
-    if (event.pointer != swipePointer || pointers.length != 1 || zoomed) return;
+    if (widget.isSwipeBlocked?.call() == true) {
+      swipeBlockedUntilPointerUp = true;
+      swipePointer = null;
+      velocityTracker = null;
+      swipeDistance = 0;
+      return;
+    }
+    if (event.pointer != swipePointer ||
+        pointers.length != 1 ||
+        zoomed ||
+        !widget.swipeEnabled ||
+        swipeBlockedUntilPointerUp) {
+      return;
+    }
     velocityTracker?.addPosition(event.timeStamp, event.position);
     swipeDistance += event.delta.distance;
     widget.onSwipeUpdate?.call(event.delta);
   }
 
   void _pointerUp(PointerUpEvent event) {
-    final active = event.pointer == swipePointer && !zoomed;
+    final blocked = swipeBlockedUntilPointerUp;
+    final active =
+        event.pointer == swipePointer &&
+        !zoomed &&
+        widget.swipeEnabled &&
+        !blocked;
     velocityTracker?.addPosition(event.timeStamp, event.position);
     final velocity = velocityTracker?.getVelocity() ?? Velocity.zero;
     pointers.remove(event.pointer);
+    if (pointers.isEmpty) swipeBlockedUntilPointerUp = false;
     swipePointer = null;
     velocityTracker = null;
     if (active && swipeDistance >= 2) {
@@ -481,6 +528,7 @@ class _AppleZoomableMediaState extends State<_AppleZoomableMedia>
 
   void _pointerCancel(PointerCancelEvent event) {
     pointers.remove(event.pointer);
+    if (pointers.isEmpty) swipeBlockedUntilPointerUp = false;
     if (event.pointer != swipePointer) return;
     swipePointer = null;
     velocityTracker = null;
@@ -1676,9 +1724,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   scale: 1 - 0.12 * actionProgress,
                   child: Opacity(
                     opacity: 1 - actionProgress,
-                    child: _photoCard(
-                      asset: 'assets/tutorial-still-life.jpg',
-                    ),
+                    child: _photoCard(asset: 'assets/tutorial-still-life.jpg'),
                   ),
                 ),
               ),
@@ -5690,6 +5736,20 @@ class _MediaThumbState extends State<MediaThumb> {
   }
 }
 
+class _ReviewUndoEntry {
+  const _ReviewUndoEntry({
+    required this.snapshot,
+    required this.item,
+    required this.preview,
+    required this.originalIndex,
+  });
+
+  final ActionSnapshot snapshot;
+  final MediaRecord item;
+  final Uint8List? preview;
+  final int originalIndex;
+}
+
 class ReviewScreen extends StatefulWidget {
   const ReviewScreen(
     this.app,
@@ -5712,15 +5772,16 @@ class ReviewScreen extends StatefulWidget {
 }
 
 class _ReviewScreenState extends State<ReviewScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const reviewBackground = _systemBackground;
   static const _horizontalFlingVelocity = 700.0;
   static const _verticalFlingVelocity = 900.0;
   static const _horizontalFlingDistance = 24.0;
   static const _verticalFlingDistance = 32.0;
   static const _verticalActionDistance = 76.0;
-  static const _filmstripItemWidth = 36.0;
-  static const _filmstripSelectedWidth = 42.0;
+  static const _filmstripItemWidth = 26.0;
+  static const _filmstripSelectedWidth = 60.0;
+  static const _filmstripSelectedTileWidth = 48.0;
 
   int index = 0;
   int total = 0;
@@ -5739,7 +5800,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   bool filmstripSelecting = false;
   int filmstripSelectionRequest = 0;
   int queueCount = 0;
-  final List<ActionSnapshot> undoHistory = [];
+  final List<_ReviewUndoEntry> undoHistory = [];
   bool currentFavorite = false;
   bool busy = false;
   Offset dragOffset = Offset.zero;
@@ -5752,8 +5813,14 @@ class _ReviewScreenState extends State<ReviewScreen>
   List<MediaRecord>? sourceItems;
   late final List<MediaRecord>? sourceOrder;
   late final AnimationController motion;
+  late final AnimationController undoMotion;
   late Animation<Offset> motionAnimation;
   late Animation<double> scaleAnimation;
+  late Animation<double> undoProgressAnimation;
+  _ReviewUndoEntry? undoCandidate;
+  double undoPullProgress = 0;
+  bool undoThresholdHaptic = false;
+  bool videoControlInteracting = false;
   bool exitPromptOpen = false;
   bool exitPromptBypassed = false;
   bool exitRequestedWhileBusy = false;
@@ -5780,6 +5847,16 @@ class _ReviewScreenState extends State<ReviewScreen>
         });
     motionAnimation = const AlwaysStoppedAnimation(Offset.zero);
     scaleAnimation = const AlwaysStoppedAnimation(1);
+    undoMotion =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 200),
+        )..addListener(() {
+          if (!mounted) return;
+          undoPullProgress = undoProgressAnimation.value;
+          gestureFrame.value++;
+        });
+    undoProgressAnimation = const AlwaysStoppedAnimation(0);
     _initialize();
   }
 
@@ -5789,6 +5866,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     edgeNotice = null;
     edgeNoticeTimer?.cancel();
     motion.dispose();
+    undoMotion.dispose();
     filmstripController.dispose();
     gestureFrame.dispose();
     super.dispose();
@@ -6139,8 +6217,33 @@ class _ReviewScreenState extends State<ReviewScreen>
     await motion.forward();
   }
 
+  Future<void> _animateUndoTo(double target, {Duration? duration}) async {
+    undoMotion.duration = duration ?? const Duration(milliseconds: 200);
+    undoProgressAnimation = Tween<double>(
+      begin: undoPullProgress,
+      end: target,
+    ).animate(CurvedAnimation(parent: undoMotion, curve: Curves.easeOutCubic));
+    await undoMotion.forward(from: 0);
+  }
+
+  void _clearUndoPull() {
+    undoCandidate = null;
+    undoPullProgress = 0;
+    undoThresholdHaptic = false;
+    undoProgressAnimation = const AlwaysStoppedAnimation(0);
+    gestureFrame.value++;
+  }
+
   Future<void> _returnToCenter({double velocity = 0}) async {
-    await _animateTo(Offset.zero, velocity: velocity);
+    final animations = <Future<void>>[
+      _animateTo(Offset.zero, velocity: velocity),
+    ];
+    if (undoCandidate != null || undoPullProgress > 0) {
+      animations.add(
+        _animateUndoTo(0, duration: const Duration(milliseconds: 150)),
+      );
+    }
+    await Future.wait(animations);
     if (mounted) {
       setState(() {
         incoming = null;
@@ -6148,6 +6251,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         dragAxis = null;
         panOffset = Offset.zero;
         actionScale = 1;
+        _clearUndoPull();
       });
     }
   }
@@ -6249,7 +6353,16 @@ class _ReviewScreenState extends State<ReviewScreen>
         actedItem,
         action,
       );
-      if (snapshot != null) undoHistory.add(snapshot);
+      if (snapshot != null) {
+        undoHistory.add(
+          _ReviewUndoEntry(
+            snapshot: snapshot,
+            item: actedItem,
+            preview: currentPreview,
+            originalIndex: previous,
+          ),
+        );
+      }
       queueCount = (await widget.app.store.queue()).length;
       final removedFromView =
           action != ReviewAction.skip &&
@@ -6327,6 +6440,31 @@ class _ReviewScreenState extends State<ReviewScreen>
           ? Axis.horizontal
           : Axis.vertical;
     }
+    final undoPull =
+        dragAxis == Axis.vertical &&
+        panOffset.dy > 0 &&
+        !widget.pendingOnly &&
+        widget.app.downAction == DownSwipeAction.undo;
+    if (undoPull) {
+      dragOffset = Offset.zero;
+      actionScale = 1;
+      undoCandidate = undoHistory.isEmpty ? null : undoHistory.last;
+      undoPullProgress = (panOffset.dy / _verticalActionDistance).clamp(
+        0.0,
+        1.0,
+      );
+      if (undoPullProgress >= 1 &&
+          !undoThresholdHaptic &&
+          undoCandidate != null) {
+        undoThresholdHaptic = true;
+        HapticFeedback.lightImpact();
+      } else if (undoPullProgress < 1) {
+        undoThresholdHaptic = false;
+      }
+      gestureFrame.value++;
+      return;
+    }
+    if (undoCandidate != null || undoPullProgress > 0) _clearUndoPull();
     final next = dragAxis == Axis.horizontal
         ? Offset(panOffset.dx, 0)
         : Offset(0, panOffset.dy);
@@ -6359,8 +6497,14 @@ class _ReviewScreenState extends State<ReviewScreen>
   Future<void> _onPanEnd(Velocity velocity) async {
     if (busy || current == null) return;
     final speed = velocity.pixelsPerSecond;
+    final undoPull =
+        dragAxis == Axis.vertical &&
+        panOffset.dy > 0 &&
+        !widget.pendingOnly &&
+        widget.app.downAction == DownSwipeAction.undo;
+    final verticalDistance = undoPull ? panOffset.dy : dragOffset.dy;
     final verticalCommit = _commitsSwipe(
-      distance: dragOffset.dy,
+      distance: verticalDistance,
       velocity: speed.dy,
       crossVelocity: speed.dx,
       distanceThreshold: _verticalActionDistance,
@@ -6368,7 +6512,7 @@ class _ReviewScreenState extends State<ReviewScreen>
       flingVelocity: _verticalFlingVelocity,
     );
     if (dragAxis == Axis.vertical && verticalCommit) {
-      if (dragOffset.dy > 0 &&
+      if (verticalDistance > 0 &&
           (widget.pendingOnly ||
               widget.app.downAction == DownSwipeAction.returnToAlbum)) {
         setState(() => busy = true);
@@ -6386,7 +6530,7 @@ class _ReviewScreenState extends State<ReviewScreen>
         }
         return;
       }
-      if (dragOffset.dy > 0 &&
+      if (verticalDistance > 0 &&
           widget.app.downAction == DownSwipeAction.undo) {
         await _undo(fromSwipe: true, velocity: speed.dy.abs());
         return;
@@ -6429,19 +6573,24 @@ class _ReviewScreenState extends State<ReviewScreen>
       }
       return;
     }
-    setState(() => busy = true);
+    final entry = undoHistory.removeLast();
+    setState(() {
+      busy = true;
+      undoCandidate = entry;
+      if (!fromSwipe) undoPullProgress = 0;
+    });
     try {
-      if (fromSwipe) {
-        await _animateTo(
-          Offset(0, MediaQuery.sizeOf(context).height * 1.08),
-          velocity: velocity,
-        );
-      }
-      final snapshot = undoHistory.last;
-      await widget.app.store.undo(snapshot);
-      undoHistory.removeLast();
+      await Future.wait([
+        _animateUndoTo(1, duration: const Duration(milliseconds: 200)),
+        widget.app.store.undo(entry.snapshot),
+      ]);
       queueCount = (await widget.app.store.queue()).length;
-      if (sourceOrder != null) await _refreshSource();
+      if (sourceItems != null) {
+        sourceItems!.removeWhere((item) => item.id == entry.item.id);
+        final restoredIndex = entry.originalIndex.clamp(0, sourceItems!.length);
+        sourceItems!.insert(restoredIndex, entry.item);
+        index = restoredIndex;
+      }
       filmstripItemCache.clear();
       total =
           sourceItems?.length ??
@@ -6450,16 +6599,46 @@ class _ReviewScreenState extends State<ReviewScreen>
             pendingOnly: widget.pendingOnly,
             unreviewedOnly: !widget.pendingOnly,
           );
-      index = sourceItems == null
-          ? await widget.app.store.positionOf(
-              widget.scope,
-              snapshot.mediaId,
-              pendingOnly: widget.pendingOnly,
-              unreviewedOnly: !widget.pendingOnly,
-            )
-          : _sourcePositionOf(snapshot.mediaId);
+      if (sourceItems == null) {
+        index = await widget.app.store.positionOf(
+          widget.scope,
+          entry.item.id,
+          pendingOnly: widget.pendingOnly,
+          unreviewedOnly: !widget.pendingOnly,
+        );
+      }
       if (index < 0) index = 0;
-      await _load();
+      final favorite = await widget.app.store.isFavorite(entry.item.id);
+      if (!mounted) return;
+      setState(() {
+        current = entry.item;
+        currentPreview = entry.preview;
+        currentFavorite = favorite;
+        incoming = null;
+        incomingPreview = null;
+        previousItem = null;
+        previousPreview = null;
+        nextItem = null;
+        nextPreview = null;
+        dragOffset = Offset.zero;
+        panOffset = Offset.zero;
+        dragAxis = null;
+        actionScale = 1;
+        _clearUndoPull();
+      });
+      await widget.app.store.saveAnchor(widget.scope, entry.item);
+      _prefetchAround(index);
+      _centerFilmstrip();
+      _showEdgeNotice('已撤回 1 张');
+    } catch (_) {
+      undoHistory.add(entry);
+      if (mounted) {
+        await _animateUndoTo(0, duration: const Duration(milliseconds: 150));
+        if (mounted) {
+          setState(_clearUndoPull);
+          _showEdgeNotice('撤回失败，请重试');
+        }
+      }
     } finally {
       _finishBusy();
     }
@@ -6544,6 +6723,8 @@ class _ReviewScreenState extends State<ReviewScreen>
     onSwipeUpdate: _onPanUpdate,
     onSwipeEnd: _onPanEnd,
     onSwipeCancel: () => unawaited(_returnToCenter()),
+    swipeEnabled: !videoControlInteracting,
+    isSwipeBlocked: () => videoControlInteracting,
     onZoomChanged: (isZoomed) {
       zoom = isZoomed ? 2 : 1;
       gestureFrame.value++;
@@ -6561,6 +6742,13 @@ class _ReviewScreenState extends State<ReviewScreen>
                 0,
               )
             : Offset.zero;
+        final returning = undoCandidate;
+        final returnProgress = undoPullProgress.clamp(0.0, 1.0);
+        final returnCurve = Curves.easeOutCubic.transform(returnProgress);
+        final returnStart = Offset(
+          screenWidth * 0.4,
+          -MediaQuery.sizeOf(context).height * 0.44,
+        );
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -6592,9 +6780,34 @@ class _ReviewScreenState extends State<ReviewScreen>
                   controlsVisible: zoom <= 1.001,
                   videoProgressBottom: 142,
                   contentPadding: _immersiveMediaPadding(context),
+                  onControlInteractionChanged: (active) {
+                    if (!mounted || videoControlInteracting == active) return;
+                    setState(() => videoControlInteracting = active);
+                  },
                 ),
               ),
             ),
+            if (returning != null && undoPullProgress > 0)
+              Opacity(
+                opacity: returnProgress,
+                child: Transform.translate(
+                  key: const Key('undo-return-translation'),
+                  offset: Offset.lerp(returnStart, Offset.zero, returnCurve)!,
+                  child: Transform.scale(
+                    key: const Key('undo-return-scale'),
+                    scale: ui.lerpDouble(0.1, 1, returnCurve)!,
+                    child: MediaView(
+                      widget.app.media,
+                      returning.item,
+                      key: ValueKey('undo-return-media-${returning.item.id}'),
+                      autoplay: false,
+                      previewBytes: returning.preview,
+                      controlsVisible: false,
+                      contentPadding: _immersiveMediaPadding(context),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -6637,26 +6850,41 @@ class _ReviewScreenState extends State<ReviewScreen>
                             );
                             unawaited(_selectFromFilmstrip(target));
                           },
-                    child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutCubic,
+                      width: selected
+                          ? _filmstripSelectedWidth
+                          : _filmstripItemWidth,
+                      alignment: Alignment.center,
                       child: AnimatedContainer(
                         key: media == null
                             ? ValueKey('review-filmstrip-tile-$target')
                             : ValueKey('review-filmstrip-tile-${media.id}'),
-                        duration: const Duration(milliseconds: 140),
+                        duration: const Duration(milliseconds: 160),
                         curve: Curves.easeOutCubic,
                         width: selected
-                            ? _filmstripSelectedWidth
+                            ? _filmstripSelectedTileWidth
                             : _filmstripItemWidth,
-                        height: selected ? 46 : 40,
+                        height: selected ? 46 : 34,
                         decoration: BoxDecoration(
                           color: const Color(0xFF2A3342),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: selected
                                 ? Colors.white
-                                : const Color(0x8899A7BC),
-                            width: selected ? 2.5 : 1,
+                                : const Color(0x6699A7BC),
+                            width: selected ? 3 : 0.8,
                           ),
+                          boxShadow: selected
+                              ? const [
+                                  BoxShadow(
+                                    color: Color(0x55000000),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 3),
+                                  ),
+                                ]
+                              : null,
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: media == null
@@ -6699,6 +6927,79 @@ class _ReviewScreenState extends State<ReviewScreen>
     ),
   );
 
+  Future<void> _showMediaDetails(MediaRecord item) =>
+      showModalBottomSheet<void>(
+        context: context,
+        useSafeArea: true,
+        showDragHandle: true,
+        backgroundColor: _secondarySystemBackground,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (context) => Padding(
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.type == 2 ? '视频详情' : '照片详情',
+                style: const TextStyle(
+                  color: _primaryLabel,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _detailRow('拍摄时间', _formatMediaDateTime(item.takenAt)),
+              _detailRow(
+                '尺寸',
+                item.width > 0 && item.height > 0
+                    ? '${item.width} × ${item.height}'
+                    : '尺寸未知',
+              ),
+              _detailRow(
+                '类型',
+                item.type == 2
+                    ? '视频'
+                    : item.live
+                    ? '实况照片'
+                    : '照片',
+              ),
+              if (item.type == 2)
+                _detailRow('时长', _formatMediaDuration(item.duration)),
+            ],
+          ),
+        ),
+      );
+
+  Widget _detailRow(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 9),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 88,
+          child: Text(
+            label,
+            style: const TextStyle(color: _secondaryLabel, fontSize: 15),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: _primaryLabel,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final item = current;
@@ -6732,13 +7033,6 @@ class _ReviewScreenState extends State<ReviewScreen>
               )
             else
               _mediaStage(item),
-            const Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              height: _immersiveHeaderHeight,
-              child: _SystemTopGradient(key: Key('page-top-gradient')),
-            ),
             ValueListenableBuilder<int>(
               valueListenable: gestureFrame,
               builder: (context, _, _) => Visibility(
@@ -6889,6 +7183,29 @@ class _ReviewScreenState extends State<ReviewScreen>
                         bottom: 58,
                         child: _filmstrip(),
                       ),
+                      if (undoCandidate != null && undoPullProgress >= 1)
+                        Positioned(
+                          key: const Key('undo-release-hint'),
+                          left: 0,
+                          right: 0,
+                          top: 64,
+                          child: Center(
+                            child: _glass(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 9,
+                              ),
+                              child: const Text(
+                                '松开撤回上一张',
+                                style: TextStyle(
+                                  color: _appleGlassForeground,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: Row(
@@ -6917,7 +7234,16 @@ class _ReviewScreenState extends State<ReviewScreen>
                                     ? const Color(0xD9E9A23B)
                                     : _appleGlass,
                               ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
+                            _glassIcon(
+                              key: const Key('media-details-control'),
+                              tooltip: item?.type == 2 ? '视频详情' : '照片详情',
+                              icon: Icons.info_outline_rounded,
+                              onPressed: busy || item == null
+                                  ? null
+                                  : () => _showMediaDetails(item),
+                            ),
+                            const SizedBox(width: 10),
                             _glassIcon(
                               key: const Key('undo-control'),
                               tooltip: '撤销上一步',
@@ -6983,6 +7309,7 @@ class MediaView extends StatefulWidget {
     this.controlsVisible = true,
     this.volumeButtonEvents,
     this.contentPadding = const EdgeInsets.all(16),
+    this.onControlInteractionChanged,
   });
   final MediaRepository media;
   final MediaRecord item;
@@ -6992,6 +7319,7 @@ class MediaView extends StatefulWidget {
   final bool controlsVisible;
   final Stream<void>? volumeButtonEvents;
   final EdgeInsets contentPadding;
+  final ValueChanged<bool>? onControlInteractionChanged;
 
   @override
   State<MediaView> createState() => _MediaViewState();
@@ -7161,6 +7489,57 @@ class _MediaViewState extends State<MediaView> {
     ),
   );
 
+  Widget _playPauseButton({VideoPlayerValue? value}) => IconButton(
+    key: const Key('video-play-pause'),
+    tooltip: value?.isPlaying == true ? '暂停视频' : '播放视频',
+    onPressed: loading ? null : _play,
+    color: Colors.white,
+    disabledColor: Colors.white54,
+    icon: loading
+        ? const SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.2,
+              color: Colors.white,
+            ),
+          )
+        : Icon(
+            value?.isPlaying == true
+                ? Icons.pause_rounded
+                : Icons.play_arrow_rounded,
+            size: 26,
+          ),
+  );
+
+  Widget _videoScrubber({
+    required double value,
+    required double max,
+    required ValueChanged<double>? onChanged,
+  }) => SliderTheme(
+    data: SliderTheme.of(context).copyWith(
+      trackHeight: 3.5,
+      activeTrackColor: Colors.white,
+      inactiveTrackColor: Colors.white38,
+      thumbColor: Colors.white,
+      disabledThumbColor: Colors.white70,
+      overlayColor: const Color(0x33FFFFFF),
+      thumbShape: const RoundSliderThumbShape(
+        enabledThumbRadius: 6,
+        disabledThumbRadius: 5,
+        elevation: 0,
+        pressedElevation: 1,
+      ),
+      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+    ),
+    child: Slider(
+      key: const Key('video-scrubber'),
+      value: value.clamp(0, max),
+      min: 0,
+      max: max,
+      onChanged: onChanged,
+    ),
+  );
+
   Widget _videoProgress() {
     final controller = player;
     if (controller?.value.isInitialized != true) {
@@ -7174,18 +7553,18 @@ class _MediaViewState extends State<MediaView> {
               Text(_formatDuration(Duration(seconds: widget.item.duration))),
             ],
           ),
-          const SizedBox(height: 5),
           Row(
             children: [
-              const Expanded(
-                child: LinearProgressIndicator(
+              _playPauseButton(),
+              Expanded(
+                child: _videoScrubber(
                   value: 0,
-                  minHeight: 4,
-                  color: Colors.white,
-                  backgroundColor: Colors.white38,
+                  max: widget.item.duration > 0
+                      ? widget.item.duration.toDouble()
+                      : 1,
+                  onChanged: null,
                 ),
               ),
-              const SizedBox(width: 6),
               _soundButton(enabled: false),
             ],
           ),
@@ -7206,19 +7585,20 @@ class _MediaViewState extends State<MediaView> {
           ),
           Row(
             children: [
+              _playPauseButton(value: value),
               Expanded(
-                child: VideoProgressIndicator(
-                  controller,
-                  allowScrubbing: true,
-                  padding: const EdgeInsets.only(top: 5, bottom: 8),
-                  colors: const VideoProgressColors(
-                    playedColor: Colors.white,
-                    bufferedColor: Colors.white54,
-                    backgroundColor: Colors.white24,
+                child: _videoScrubber(
+                  value: value.position.inMilliseconds / 1000,
+                  max: value.duration > Duration.zero
+                      ? value.duration.inMilliseconds / 1000
+                      : 1,
+                  onChanged: (seconds) => unawaited(
+                    controller.seekTo(
+                      Duration(milliseconds: (seconds * 1000).round()),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
               _soundButton(enabled: true),
             ],
           ),
@@ -7286,24 +7666,6 @@ class _MediaViewState extends State<MediaView> {
                           top: 12,
                           child: _LivePhotoBadge(showLabel: true),
                         ),
-                      if (widget.item.type == 2 && widget.controlsVisible)
-                        Positioned.fill(
-                          child: Center(
-                            child: IconButton.filledTonal(
-                              tooltip: player?.value.isPlaying == true
-                                  ? '暂停视频'
-                                  : '播放视频',
-                              onPressed: loading ? null : _play,
-                              icon: loading
-                                  ? const CircularProgressIndicator()
-                                  : Icon(
-                                      player?.value.isPlaying == true
-                                          ? Icons.pause
-                                          : Icons.play_arrow,
-                                    ),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -7316,24 +7678,33 @@ class _MediaViewState extends State<MediaView> {
               left: 30,
               right: 30,
               bottom: widget.videoProgressBottom,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xA6000000),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0x88FFFFFF)),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x33000000), blurRadius: 12),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-                  child: DefaultTextStyle(
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (_) =>
+                    widget.onControlInteractionChanged?.call(true),
+                onPointerUp: (_) =>
+                    widget.onControlInteractionChanged?.call(false),
+                onPointerCancel: (_) =>
+                    widget.onControlInteractionChanged?.call(false),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xA6000000),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0x88FFFFFF)),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x33000000), blurRadius: 12),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 7, 8, 2),
+                    child: DefaultTextStyle(
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      child: _videoProgress(),
                     ),
-                    child: _videoProgress(),
                   ),
                 ),
               ),
@@ -7974,6 +8345,7 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
   int browseDirection = 1;
   bool zoomed = false;
   bool busy = false;
+  bool videoControlInteracting = false;
 
   @override
   void initState() {
@@ -8152,9 +8524,15 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
             item,
             key: ValueKey('queue-preview-media-$id'),
             autoplay: autoplay,
-            controlsVisible: !zoomed,
+            controlsVisible: autoplay && !zoomed,
             videoProgressBottom: 142,
             contentPadding: _immersiveMediaPadding(context),
+            onControlInteractionChanged: autoplay
+                ? (active) {
+                    if (!mounted || videoControlInteracting == active) return;
+                    setState(() => videoControlInteracting = active);
+                  }
+                : null,
           );
         },
       );
@@ -8175,6 +8553,8 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
       onSwipeUpdate: _onSwipeUpdate,
       onSwipeEnd: _onSwipeEnd,
       onSwipeCancel: () => unawaited(_returnToCenter()),
+      swipeEnabled: !videoControlInteracting,
+      isSwipeBlocked: () => videoControlInteracting,
       onZoomChanged: (value) {
         if (mounted && zoomed != value) setState(() => zoomed = value);
       },
@@ -8211,13 +8591,6 @@ class _QueuePreviewScreenState extends State<QueuePreviewScreen>
         fit: StackFit.expand,
         children: [
           _mediaStage(),
-          const Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            height: _immersiveHeaderHeight,
-            child: _SystemTopGradient(key: Key('page-top-gradient')),
-          ),
           Visibility(
             visible: !zoomed,
             child: SafeArea(
