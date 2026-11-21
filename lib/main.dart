@@ -5776,12 +5776,12 @@ class _ReviewScreenState extends State<ReviewScreen>
   static const reviewBackground = _systemBackground;
   static const _horizontalFlingVelocity = 700.0;
   static const _verticalFlingVelocity = 900.0;
-  static const _undoFlingVelocity = 1050.0;
+  static const _undoFlingVelocity = 1200.0;
   static const _horizontalFlingDistance = 24.0;
   static const _verticalFlingDistance = 32.0;
-  static const _undoFlingDistance = 48.0;
+  static const _undoFlingDistance = 64.0;
   static const _verticalActionDistance = 76.0;
-  static const _undoActionDistance = 104.0;
+  static const _undoActionDistance = 128.0;
   static const _filmstripItemWidth = 26.0;
   static const _filmstripSelectedWidth = 60.0;
   static const _filmstripSelectedTileWidth = 48.0;
@@ -5853,7 +5853,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     undoMotion =
         AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 260),
+          duration: const Duration(milliseconds: 360),
         )..addListener(() {
           if (!mounted) return;
           undoPullProgress = undoProgressAnimation.value;
@@ -6221,7 +6221,7 @@ class _ReviewScreenState extends State<ReviewScreen>
   }
 
   Future<void> _animateUndoTo(double target, {Duration? duration}) async {
-    undoMotion.duration = duration ?? const Duration(milliseconds: 260);
+    undoMotion.duration = duration ?? const Duration(milliseconds: 360);
     undoProgressAnimation = Tween<double>(
       begin: undoPullProgress,
       end: target,
@@ -6243,7 +6243,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     ];
     if (undoCandidate != null || undoPullProgress > 0) {
       animations.add(
-        _animateUndoTo(0, duration: const Duration(milliseconds: 180)),
+        _animateUndoTo(0, duration: const Duration(milliseconds: 240)),
       );
     }
     await Future.wait(animations);
@@ -6583,7 +6583,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     });
     try {
       await Future.wait([
-        _animateUndoTo(1, duration: const Duration(milliseconds: 260)),
+        _animateUndoTo(1, duration: const Duration(milliseconds: 360)),
         widget.app.store.undo(entry.snapshot),
       ]);
       queueCount = (await widget.app.store.queue()).length;
@@ -6635,7 +6635,7 @@ class _ReviewScreenState extends State<ReviewScreen>
     } catch (_) {
       undoHistory.add(entry);
       if (mounted) {
-        await _animateUndoTo(0, duration: const Duration(milliseconds: 180));
+        await _animateUndoTo(0, duration: const Duration(milliseconds: 240));
         if (mounted) {
           setState(_clearUndoPull);
           _showEdgeNotice('撤回失败，请重试');
@@ -6746,7 +6746,7 @@ class _ReviewScreenState extends State<ReviewScreen>
             : Offset.zero;
         final returning = undoCandidate;
         final returnProgress = undoPullProgress.clamp(0.0, 1.0);
-        final returnOpacity = Curves.easeOutQuad.transform(returnProgress);
+        final returnOpacity = Curves.easeOut.transform(returnProgress);
         final returnStart = Offset(
           screenWidth * 0.4,
           -MediaQuery.sizeOf(context).height * 0.44,

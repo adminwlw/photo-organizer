@@ -4,7 +4,7 @@
 
 - App 名称：相册删除
 - Bundle ID：`com.sim360.albumcleaner.albumCleaner`
-- 版本：`0.1.56+57`
+- 版本：`0.1.57+58`
 - 最低系统：iOS 15.0
 - 照片权限说明已经写入 `ios/Runner/Info.plist`
 - 当前 App 图标仍为 Flutter 默认图标；正式上架前需要替换 `ios/Runner/Assets.xcassets/AppIcon.appiconset`。

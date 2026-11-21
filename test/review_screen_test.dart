@@ -1917,7 +1917,7 @@ void main() {
     var gesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('photo'))),
     );
-    await gesture.moveBy(const Offset(0, 112));
+    await gesture.moveBy(const Offset(0, 136));
     await gesture.up();
     await tester.pumpAndSettle();
 
@@ -1951,20 +1951,20 @@ void main() {
     final returnScale = tester.widget<Transform>(
       find.byKey(const Key('undo-return-scale')),
     );
-    expect(returnScale.transform.storage[0], closeTo(0.515, 0.01));
+    expect(returnScale.transform.storage[0], closeTo(0.438, 0.01));
     final returnOpacity = tester.widget<Opacity>(
       find.byKey(const Key('undo-return-opacity')),
     );
     expect(
       returnOpacity.opacity,
-      closeTo(Curves.easeOutQuad.transform(48 / 104), 0.001),
+      closeTo(Curves.easeOut.transform(48 / 128), 0.001),
     );
     expect(find.byKey(const ValueKey('next-photo')), findsOneWidget);
 
     await gesture.moveBy(const Offset(0, 52));
     await tester.pump();
     expect(find.text('松开撤回上一张'), findsNothing);
-    await gesture.moveBy(const Offset(0, 8));
+    await gesture.moveBy(const Offset(0, 28));
     await tester.pump();
     expect(find.text('松开撤回上一张'), findsOneWidget);
     await gesture.up();
@@ -2006,7 +2006,7 @@ void main() {
     final undoGesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('third-photo'))),
     );
-    await undoGesture.moveBy(const Offset(0, 112));
+    await undoGesture.moveBy(const Offset(0, 136));
     await undoGesture.up();
     await tester.pumpAndSettle();
 
@@ -2040,7 +2040,7 @@ void main() {
     var undoGesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('next-photo'))),
     );
-    await undoGesture.moveBy(const Offset(0, 112));
+    await undoGesture.moveBy(const Offset(0, 136));
     await undoGesture.up();
     await tester.pump(const Duration(milliseconds: 240));
     expect(store.undoCalls, 1);
@@ -2048,7 +2048,7 @@ void main() {
     undoGesture = await tester.startGesture(
       tester.getCenter(find.byKey(const Key('review-gesture'))),
     );
-    await undoGesture.moveBy(const Offset(0, 112));
+    await undoGesture.moveBy(const Offset(0, 136));
     await undoGesture.up();
     await tester.pump();
     expect(store.undoCalls, 1);
